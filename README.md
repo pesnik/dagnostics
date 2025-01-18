@@ -80,17 +80,27 @@ The application is configured through `config/config.yaml`:
 
 ## 📊 Usage
 
-### CLI Interface
+### Command-Line Interface (CLI)
 
+DAGnostics provides a CLI for managing the monitoring and reporting system. Use the following commands:
+
+#### Start the System
 ```bash
-# Generate daily report
-dagnostics report daily
+poetry run dagnostics start
+```
 
-# Analyze specific DAG
-dagnostics analyze my-dag-name
+#### Analyze a Specific DAG
+```bash
+poetry run dagnostics analyze <dag-name>
+```
 
-# Start monitoring server
-dagnostics server start
+#### Generate a Report
+```bash
+# Generate a standard report
+poetry run dagnostics report
+
+# Generate a daily report
+poetry run dagnostics report --daily
 ```
 
 ### Python API

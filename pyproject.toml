@@ -2,9 +2,7 @@
 name = "dagnostics"
 version = "0.1.0"
 description = ""
-authors = [
-    {name = "rhasanm",email = "hasanrakibul.masum@gmail.com"}
-]
+authors = [{ name = "rhasanm", email = "hasanrakibul.masum@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
 dependencies = [
@@ -17,12 +15,11 @@ dependencies = [
     "uvicorn (>=0.34.0,<0.35.0)",
     "pydantic (>=2.10.5,<3.0.0)",
     "typer (>=0.15.1,<0.16.0)",
-    "rich (>=13.9.4,<14.0.0)"
+    "rich (>=13.9.4,<14.0.0)",
 ]
 
 [tool.poetry]
-packages = [{include = "dagnostics", from = "src"}]
-
+packages = [{ include = "dagnostics", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
 invoke = "^2.2.0"
@@ -33,6 +30,11 @@ isort = "^5.13.2"
 flake8 = "^7.1.1"
 mypy = "^1.14.1"
 pre-commit = "^4.0.1"
+types-pyyaml = "^6.0.12.20241230"
+
+[tool.poetry.scripts]
+start = "dagnostics.main:main"
+dagnostics = "dagnostics.cli.main:cli"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

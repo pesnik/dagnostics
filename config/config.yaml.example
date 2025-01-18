@@ -4,6 +4,9 @@ llm:
   max_tokens: 500
 
 monitoring:
+  interval: 60
+  log_path: /var/log/dagnostics
+
   categories:
     - system_error
     - resource_constraint

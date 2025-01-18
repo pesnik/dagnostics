@@ -29,3 +29,4 @@ ENV/
 *.swp
 .DS_Store
 config/config.yaml
+logs/
