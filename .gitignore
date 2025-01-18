@@ -30,3 +30,6 @@ ENV/
 .DS_Store
 config/config.yaml
 logs/
+
+/data/*
+!/data/README.md

@@ -54,21 +54,25 @@ cp config/config.yaml.example config/config.yaml
 
 ```
 dagnostics/
+├── data/                   # Directory for pre-collected data (added)
+│   ├── raw/                # Raw data files
+│   ├── processed/          # Processed data files
+│   └── README.md           # Documentation for the data
 ├── src/
 │   └── dagnostics/
-│       ├── core/          # Core functionality and config
-│       ├── llm/           # LLM integration and parsing
-│       ├── monitoring/    # Log collection and analysis
-│       ├── reporting/     # Report generation
-│       ├── utils/         # Shared utilities
-│       └── cli/           # Command-line interface
-├── tests/                 # Test suite
-├── config/                # Configuration files
-├── docs/                  # Documentation
-├── scripts/               # Utility scripts
-├── tasks/                 # Development tasks (Invoke)
-├── .github/               # GitHub Actions
-├── pyproject.toml         # Project metadata and dependencies
+│       ├── core/           # Core functionality and config
+│       ├── llm/            # LLM integration and parsing
+│       ├── monitoring/     # Log collection and analysis
+│       ├── reporting/      # Report generation
+│       ├── utils/          # Shared utilities
+│       └── cli/            # Command-line interface
+├── tests/                  # Test suite
+├── config/                 # Configuration files
+├── docs/                   # Documentation
+├── scripts/                # Utility scripts
+├── tasks/                  # Development tasks (Invoke)
+├── .github/                # GitHub Actions
+├── pyproject.toml          # Project metadata and dependencies
 └── README.md
 ```
 
