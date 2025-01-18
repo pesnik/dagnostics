@@ -123,41 +123,6 @@ Run the following commands from the root of the project:
 | `invoke dev.lint`        | Lint the code using `flake8` and `mypy`.        |
 | `invoke dev.test`        | Run all tests with `pytest`.                    |
 
-### Example Usage
-
-```bash
-# Set up the development environment
-invoke dev.setup
-
-# Format the code
-invoke dev.format
-
-# Lint the code
-invoke dev.lint
-
-# Run tests
-invoke dev.test
-```
-
-### Adding Custom Tasks
-
-You can add custom tasks by creating new Python files in the `tasks/` folder. For example, to add a task for running a specific test file:
-
-```python
-# tasks/test.py
-from invoke import task
-
-@task
-def unit(c):
-    """Run unit tests."""
-    c.run("pytest tests/unit/")
-```
-
-Then, run the task with:
-```bash
-invoke test.unit
-```
-
 ## 🧪 Testing
 
 ```bash
