@@ -28,34 +28,24 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 
 ## 🚀 Quick Start
 
-1. Create the project structure:
-```bash
-# Download the setup script
-curl -O https://raw.githubusercontent.com/rhasanm/dagnostics/main/scripts/create_project.py
-chmod +x create_project.py
-
-# Run the setup script
-python create_project.py
-```
-
-2. Navigate to the project and install dependencies:
+1. Navigate to the project and install dependencies:
 ```bash
 cd dagnostics
 poetry install
 ```
 
-3. Set up pre-commit hooks:
+2. Set up pre-commit hooks:
 ```bash
 poetry shell
 pre-commit install
 ```
 
-4. Set up Ollama with your preferred model:
+3. Set up Ollama with your preferred model:
 ```bash
 ollama pull mistral
 ```
 
-5. Configure your environment:
+4. Configure your environment:
 ```bash
 cp config/config.yaml.example config/config.yaml
 cp .env.example .env
