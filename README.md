@@ -16,7 +16,8 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 - Poetry for dependency management
 - Ollama for local LLM deployment
 - LangChain for LLM orchestration
-- FastAPI for API endpoints (optional)
+- FastAPI for API endpoints
+- Typer for CLI interface
 
 ## 📋 Prerequisites
 
@@ -25,34 +26,67 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 - Ollama installed and running locally
 - Access to your ETL system's logs
 
-## 🚀 Installation
+## 🚀 Quick Start
 
-1. Clone the repository:
+1. Create the project structure:
 ```bash
-git clone https://github.com/rhasanm/dagnostics.git
-cd dagnostics
+# Download the setup script
+curl -O https://raw.githubusercontent.com/rhasanm/dagnostics/main/scripts/create_project.py
+chmod +x create_project.py
+
+# Run the setup script
+python create_project.py
 ```
 
-2. Install dependencies using Poetry:
+2. Navigate to the project and install dependencies:
 ```bash
+cd dagnostics
 poetry install
 ```
 
-3. Set up Ollama with your preferred model:
+3. Set up pre-commit hooks:
 ```bash
-ollama pull mistral
-# or any other supported model
+poetry shell
+pre-commit install
 ```
 
-4. Configure your environment variables:
+4. Set up Ollama with your preferred model:
 ```bash
+ollama pull mistral
+```
+
+5. Configure your environment:
+```bash
+cp config/config.yaml.example config/config.yaml
 cp .env.example .env
-# Edit .env with your configurations
+# Edit these files with your configurations
+```
+
+## 📁 Project Structure
+
+```
+dagnostics/
+├── src/
+│   └── dagnostics/
+│       ├── core/          # Core functionality and config
+│       ├── llm/           # LLM integration and parsing
+│       ├── monitoring/    # Log collection and analysis
+│       ├── reporting/     # Report generation
+│       ├── utils/         # Shared utilities
+│       └── cli/           # Command-line interface
+├── tests/                 # Test suite
+├── config/                # Configuration files
+├── docs/                  # Documentation
+├── scripts/               # Utility scripts
+├── tasks/                 # Development tasks (Invoke)
+├── .github/               # GitHub Actions
+├── pyproject.toml         # Project metadata and dependencies
+└── README.md
 ```
 
 ## 🔧 Configuration
 
-Create a `config.yaml` file in the root directory:
+The application is configured through `config/config.yaml`:
 
 ```yaml
 llm:
@@ -76,66 +110,122 @@ reporting:
 
 ## 📊 Usage
 
-1. Start the DAGnostics service:
+### CLI Interface
+
 ```bash
-poetry run python -m dagnostics.main
+# Generate daily report
+dagnostics report daily
+
+# Analyze specific DAG
+dagnostics analyze my-dag-name
+
+# Start monitoring server
+dagnostics server start
 ```
 
-2. Generate daily report:
-```bash
-poetry run python -m dagnostics.report
+### Python API
+
+```python
+from dagnostics.monitoring import DAGMonitor
+from dagnostics.reporting import ReportGenerator
+
+# Initialize monitor
+monitor = DAGMonitor()
+
+# Generate report
+generator = ReportGenerator()
+report = generator.create_daily_report()
 ```
 
-Example output:
+## 🛠 Development Tasks
+
+The `tasks/` folder contains utility scripts for common development tasks, such as setting up the environment, linting, formatting, and running tests. These tasks are powered by [Invoke](http://www.pyinvoke.org/).
+
+### Available Tasks
+
+Run the following commands from the root of the project:
+
+| Command                  | Description                                      |
+|--------------------------|--------------------------------------------------|
+| `invoke dev.setup`       | Set up the development environment.             |
+| `invoke dev.clean`       | Clean build artifacts and temporary files.      |
+| `invoke dev.format`      | Format the code using `black` and `isort`.      |
+| `invoke dev.lint`        | Lint the code using `flake8` and `mypy`.        |
+| `invoke dev.test`        | Run all tests with `pytest`.                    |
+
+### Example Usage
+
+```bash
+# Set up the development environment
+invoke dev.setup
+
+# Format the code
+invoke dev.format
+
+# Lint the code
+invoke dev.lint
+
+# Run tests
+invoke dev.test
 ```
-DAGnostics Daily Report
-----------------------
-Total Failed DAGs: 4
-Total Failed Tasks: 7
-Total Attempts: 36
-Failed DAG Of The Day: adtech_customer_interaction_info_campaign
-Failed Categories:
-- system_error: 5
-- resource_constraint: 12
-- connectivity: 1
-- data_availability: 12
-- data_quality: 1
-- syntax_error: 1
+
+### Adding Custom Tasks
+
+You can add custom tasks by creating new Python files in the `tasks/` folder. For example, to add a task for running a specific test file:
+
+```python
+# tasks/test.py
+from invoke import task
+
+@task
+def unit(c):
+    """Run unit tests."""
+    c.run("pytest tests/unit/")
+```
+
+Then, run the task with:
+```bash
+invoke test.unit
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run with coverage
+poetry run pytest --cov=dagnostics
+
+# Run specific test file
+poetry run pytest tests/llm/test_parser.py
+```
+
+## 📝 Development
+
+1. Create a new branch:
+```bash
+git checkout -b feature/amazing-feature
+```
+
+2. Make your changes and ensure tests pass:
+```bash
+./scripts/test.sh
+```
+
+3. Format and lint your code:
+```bash
+./scripts/lint.sh
+```
+
+4. Commit your changes:
+```bash
+git commit -m "Add amazing feature"
 ```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📝 Project Structure
-
-```
-dagnostics/
-├── pyproject.toml
-├── README.md
-├── dagnostics/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── config.py
-│   ├── llm/
-│   │   ├── __init__.py
-│   │   ├── parser.py
-│   │   └── prompts.py
-│   ├── monitoring/
-│   │   ├── __init__.py
-│   │   └── collector.py
-│   └── reporting/
-│       ├── __init__.py
-│       └── generator.py
-├── tests/
-│   └── ...
-└── examples/
-    └── ...
-```
+See [CONTRIBUTING.md](docs/contributing.md) for detailed guidelines.
 
 ## 📄 License
 
@@ -147,6 +237,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with Python, Poetry, Ollama, and LangChain
 - Special thanks to the open-source community
 
-## 📞 Contact
+## 📞 Support
 
 For questions and support, please open an issue in the GitHub repository.
