@@ -48,8 +48,6 @@ ollama pull mistral
 4. Configure your environment:
 ```bash
 cp config/config.yaml.example config/config.yaml
-cp .env.example .env
-# Edit these files with your configurations
 ```
 
 ## 📁 Project Structure
