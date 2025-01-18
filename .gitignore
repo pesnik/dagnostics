@@ -28,3 +28,4 @@ ENV/
 .vscode/
 *.swp
 .DS_Store
+config/config.yaml

@@ -78,26 +78,6 @@ dagnostics/
 
 The application is configured through `config/config.yaml`:
 
-```yaml
-llm:
-  model: mistral
-  temperature: 0.1
-  max_tokens: 500
-
-monitoring:
-  categories:
-    - system_error
-    - resource_constraint
-    - connectivity
-    - data_availability
-    - data_quality
-    - syntax_error
-
-reporting:
-  format: markdown
-  include_trends: true
-```
-
 ## 📊 Usage
 
 ### CLI Interface
