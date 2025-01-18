@@ -43,6 +43,11 @@ loggers:
     handlers: [json_file]
     propagate: False
 
+  dagnostics.cli:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: False
+
 root:
   level: WARNING
   handlers: [console]
