@@ -31,5 +31,6 @@ ENV/
 config/config.yaml
 logs/
 
-/data/*
+data/*
+!data/**/.gitkeep
 !/data/README.md
