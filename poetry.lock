@@ -1776,6 +1776,18 @@ files = [
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pylint-venv"
+version = "3.0.4"
+description = "pylint-venv provides a Pylint init-hook to use the same Pylint installation with different virtual environments."
+optional = false
+python-versions = "<4.0.0,>=3.7.2"
+groups = ["dev"]
+files = [
+    {file = "pylint_venv-3.0.4-py3-none-any.whl", hash = "sha256:31006a3df398f58f962c9e5620e756b284e8b2bc490594ce5ee5da41920cb32c"},
+    {file = "pylint_venv-3.0.4.tar.gz", hash = "sha256:4c71c2ad14fc0549699440bcc460994ffddc1481b9078404b4c43d2806ef0f59"},
+]
+
+[[package]]
 name = "pytest"
 version = "8.3.4"
 description = "pytest: simple powerful testing with Python"
@@ -2319,4 +2331,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "73fb9e38ceee2e1e7cf9699eac8c3bb5576de1c138464829182865ce13fbce72"
+content-hash = "63fd86449182acee181e576ccc8f42038738028473b2041fbdad4ef74762a9c0"
