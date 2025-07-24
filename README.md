@@ -4,81 +4,104 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 
 ## 🌟 Features
 
-- Automated DAG error log parsing and categorization
-- Daily statistics and trend analysis
-- Error pattern recognition using LLMs
-- Customizable reporting formats
-- Integration with existing ETL monitoring systems
+  - Automated DAG error log parsing and categorization
+  - Daily statistics and trend analysis
+  - Error pattern recognition using LLMs
+  - Customizable reporting formats
+  - Integration with existing ETL monitoring systems
+
+-----
 
 ## 🛠 Tech Stack
 
-- Python 3.10+
-- Poetry for dependency management
-- Ollama for local LLM deployment
-- LangChain for LLM orchestration
-- FastAPI for API endpoints
-- Typer for CLI interface
+  - Python 3.10+
+  - **uv** for dependency management
+  - Ollama for local LLM deployment
+  - LangChain for LLM orchestration
+  - FastAPI for API endpoints
+  - Typer for CLI interface
+
+-----
 
 ## 📋 Prerequisites
 
-- Python 3.10 or higher
-- Poetry installed on your system
-- Ollama installed and running locally
-- Access to your ETL system's logs
+  - Python 3.10 or higher
+  - **uv** installed on your system (`pip install uv`)
+  - Ollama installed and running locally
+  - Access to your ETL system's logs
+
+-----
 
 ## 🚀 Quick Start
 
-1. Navigate to the project and install dependencies:
+1.  Navigate to the project and install dependencies:
+
+<!-- end list -->
+
 ```bash
 cd dagnostics
-poetry install
+uv sync
 ```
 
-2. Set up pre-commit hooks:
+2.  Set up pre-commit hooks:
+
+<!-- end list -->
+
 ```bash
-poetry shell
-pre-commit install
+uv run pre-commit install
 ```
 
-3. Set up Ollama with your preferred model:
+3.  Set up Ollama with your preferred model:
+
+<!-- end list -->
+
 ```bash
 ollama pull mistral
 ```
 
-4. Configure your environment:
+4.  Configure your environment:
+
+<!-- end list -->
+
 ```bash
 cp config/config.yaml.example config/config.yaml
 ```
+
+-----
 
 ## 📁 Project Structure
 
 ```
 dagnostics/
-├── data/                   # Directory for pre-collected data (added)
-│   ├── raw/                # Raw data files
-│   ├── processed/          # Processed data files
-│   └── README.md           # Documentation for the data
+├── data/                   # Directory for pre-collected data (added)
+│   ├── raw/                # Raw data files
+│   ├── processed/          # Processed data files
+│   └── README.md           # Documentation for the data
 ├── src/
-│   └── dagnostics/
-│       ├── core/           # Core functionality and config
-│       ├── llm/            # LLM integration and parsing
-│       ├── monitoring/     # Log collection and analysis
-│       ├── reporting/      # Report generation
-│       ├── utils/          # Shared utilities
-│       └── cli/            # Command-line interface
-├── tests/                  # Test suite
-├── config/                 # Configuration files
-├── docs/                   # Documentation
-├── scripts/                # Utility scripts
-├── tasks/                  # Development tasks (Invoke)
-├── .github/                # GitHub Actions
-├── pyproject.toml          # Project metadata and dependencies
+│   └── dagnostics/
+│       ├── core/           # Core functionality and config
+│       ├── llm/            # LLM integration and parsing
+│       ├── monitoring/     # Log collection and analysis
+│       ├── reporting/      # Report generation
+│       ├── utils/          # Shared utilities
+│       └── cli/            # Command-line interface
+├── tests/                  # Test suite
+├── config/                 # Configuration files
+├── docs/                   # Documentation
+├── scripts/                # Utility scripts
+├── tasks/                  # Development tasks (Invoke)
+├── .github/                # GitHub Actions
+├── pyproject.toml          # Project metadata and dependencies
 └── README.md
 ```
 
+-----
+
 ## 🔧 Configuration
 
-The application is configured through `config/config.yaml`:
+The application is configured through `config/config.yaml`.
+
+-----
 
 ## 📊 Usage
 
@@ -87,22 +110,25 @@ The application is configured through `config/config.yaml`:
 DAGnostics provides a CLI for managing the monitoring and reporting system. Use the following commands:
 
 #### Start the System
+
 ```bash
-poetry run dagnostics start
+uv run dagnostics start
 ```
 
 #### Analyze a Specific DAG
+
 ```bash
-poetry run dagnostics analyze <dag-name>
+uv run dagnostics analyze <dag-name>
 ```
 
 #### Generate a Report
+
 ```bash
 # Generate a standard report
-poetry run dagnostics report
+uv run dagnostics report
 
 # Generate a daily report
-poetry run dagnostics report --daily
+uv run dagnostics report --daily
 ```
 
 ### Python API
@@ -119,6 +145,8 @@ generator = ReportGenerator()
 report = generator.create_daily_report()
 ```
 
+-----
+
 ## 🛠 Development Tasks
 
 The `tasks/` folder contains utility scripts for common development tasks, such as setting up the environment, linting, formatting, and running tests. These tasks are powered by [Invoke](http://www.pyinvoke.org/).
@@ -127,62 +155,86 @@ The `tasks/` folder contains utility scripts for common development tasks, such 
 
 Run the following commands from the root of the project:
 
-| Command                  | Description                                      |
+| Command                  | Description                                      |
 |--------------------------|--------------------------------------------------|
-| `invoke dev.setup`       | Set up the development environment.             |
-| `invoke dev.clean`       | Clean build artifacts and temporary files.      |
-| `invoke dev.format`      | Format the code using `black` and `isort`.      |
-| `invoke dev.lint`        | Lint the code using `flake8` and `mypy`.        |
-| `invoke dev.test`        | Run all tests with `pytest`.                    |
+| `invoke dev.setup`       | Set up the development environment.             |
+| `invoke dev.clean`       | Clean build artifacts and temporary files.      |
+| `invoke dev.format`      | Format the code using `black` and `isort`.      |
+| `invoke dev.lint`        | Lint the code using `flake8` and `mypy`.        |
+| `invoke dev.test`        | Run all tests with `pytest`.                    |
+
+-----
 
 ## 🧪 Testing
 
 ```bash
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run with coverage
-poetry run pytest --cov=dagnostics
+uv run pytest --cov=dagnostics
 
 # Run specific test file
-poetry run pytest tests/llm/test_parser.py
+uv run pytest tests/llm/test_parser.py
 ```
+
+-----
 
 ## 📝 Development
 
-1. Create a new branch:
+1.  Create a new branch:
+
+<!-- end list -->
+
 ```bash
 git checkout -b feature/amazing-feature
 ```
 
-2. Make your changes and ensure tests pass:
+2.  Make your changes and ensure tests pass:
+
+<!-- end list -->
+
 ```bash
 ./scripts/test.sh
 ```
 
-3. Format and lint your code:
+3.  Format and lint your code:
+
+<!-- end list -->
+
 ```bash
 ./scripts/lint.sh
 ```
 
-4. Commit your changes:
+4.  Commit your changes:
+
+<!-- end list -->
+
 ```bash
 git commit -m "Add amazing feature"
 ```
 
+-----
+
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](docs/contributing.md) for detailed guidelines.
+See [CONTRIBUTING.md](https://www.google.com/search?q=docs/contributing.md) for detailed guidelines.
+
+-----
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+
+-----
 
 ## 🙏 Acknowledgments
 
-- Inspired by the daily L1 support rotation practice
-- Built with Python, Poetry, Ollama, and LangChain
-- Special thanks to the open-source community
+  - Inspired by the daily L1 support rotation practice
+  - Built with Python, **uv**, Ollama, and LangChain
+  - Special thanks to the open-source community
+
+-----
 
 ## 📞 Support
 

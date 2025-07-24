@@ -1,20 +1,62 @@
-llm:
-  model: mistral
-  temperature: 0.1
-  max_tokens: 500
+app:
+  name: "DAGnostics"
+  version: "0.1.0"
+  description: "DAG monitoring and diagnostics system"
 
 monitoring:
   interval: 60
-  log_path: /var/log/dagnostics
 
-  categories:
-    - system_error
-    - resource_constraint
-    - connectivity
-    - data_availability
-    - data_quality
-    - syntax_error
+  log_path: "/var/log/airflow"
+
+  patterns:
+    - "*.log"
+    - "dag_*.log"
+    - "scheduler.log"
+
+  error_patterns:
+    - "ERROR"
+    - "CRITICAL"
+    - "Failed"
+    - "Exception"
+
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+    timeout: 30
 
 reporting:
-  format: markdown
-  include_trends: true
+  format: "json"
+
+  output_dir: "./reports"
+
+  frequency: "daily"
+
+  email:
+    enabled: false
+    smtp_server: "localhost"
+    smtp_port: 587
+    username: ""
+    password: ""
+    recipients: []
+
+  slack:
+    enabled: false
+    webhook_url: ""
+    channel: "#alerts"
+
+database:
+  enabled: false
+  type: "sqlite"  # sqlite, postgresql, mysql
+  host: "localhost"
+  port: 5432
+  name: "dagnostics"
+  username: ""
+  password: ""
+
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  debug: false
+
+log_level: "INFO"

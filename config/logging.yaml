@@ -1,53 +1,75 @@
 version: 1
-disable_existing_loggers: False
+disable_existing_loggers: false
 
 formatters:
-  standard:
-    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  default:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+
+  detailed:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+
   json:
-    format: '{"time": "%(asctime)s", "name": "%(name)s", "level": "%(levelname)s", "message": "%(message)s"}'
+    format: '{"timestamp": "%(asctime)s", "logger": "%(name)s", "level": "%(levelname)s", "function": "%(funcName)s", "line": %(lineno)d, "message": "%(message)s"}'
+    datefmt: '%Y-%m-%d %H:%M:%S'
 
 handlers:
   console:
     class: logging.StreamHandler
     level: INFO
-    formatter: standard
+    formatter: default
     stream: ext://sys.stdout
 
   file:
     class: logging.handlers.RotatingFileHandler
     level: DEBUG
-    formatter: standard
-    filename: logs/app.log
-    maxBytes: 10485760  # 10 MB
+    formatter: detailed
+    filename: logs/dagnostics.log
+    maxBytes: 10485760  # 10MB
     backupCount: 5
     encoding: utf8
 
-  json_file:
+  error_file:
     class: logging.handlers.RotatingFileHandler
-    level: DEBUG
-    formatter: json
-    filename: logs/app.json.log
-    maxBytes: 10485760  # 10 MB
+    level: ERROR
+    formatter: detailed
+    filename: logs/dagnostics_error.log
+    maxBytes: 10485760  # 10MB
     backupCount: 5
     encoding: utf8
 
 loggers:
   dagnostics:
     level: DEBUG
-    handlers: [console, file]
-    propagate: False
+    handlers: [console, file, error_file]
+    propagate: false
 
-  dagnostics.api:
-    level: INFO
-    handlers: [json_file]
-    propagate: False
-
-  dagnostics.cli:
+  dagnostics.core:
     level: DEBUG
+    handlers: [file]
+    propagate: true
+
+  dagnostics.monitoring:
+    level: INFO
     handlers: [console, file]
-    propagate: False
+    propagate: true
+
+  dagnostics.reporting:
+    level: INFO
+    handlers: [console, file]
+    propagate: true
+
+  uvicorn:
+    level: INFO
+    handlers: [console]
+    propagate: false
+
+  fastapi:
+    level: INFO
+    handlers: [console]
+    propagate: false
 
 root:
-  level: WARNING
-  handlers: [console]
+  level: INFO
+  handlers: [console, file]
