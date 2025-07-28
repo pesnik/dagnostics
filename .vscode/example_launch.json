@@ -1,0 +1,63 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug CLI - Analyze",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dagnostics/cli/main.py",
+            "cwd": "${workspaceFolder}",
+                "args": [
+                "analyze",
+                "my_example_dag_id",
+                "my_example_task_id",
+                "my_example_run_id",
+                "--format", "text",
+                "-v"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "name": "Python: Debug CLI - Start Monitor",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dagnostics/cli/main.py",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "start",
+                "--interval", "1"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "name": "Python: Debug CLI - Report",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dagnostics/cli/main.py",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "report",
+                "--daily",
+                "--format", "html",
+                "-o", "reports/daily_report.html"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "envFile": "${workspaceFolder}/.env"
+        },
+        {
+            "name": "Python: Run CLI (Default)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/dagnostics/cli/main.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

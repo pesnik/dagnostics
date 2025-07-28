@@ -68,7 +68,7 @@ class LogClusterer:
         for log_entry in successful_logs:
             result = baseline_drain.add_log_message(log_entry.message)
             if result["change_type"] != "none":
-                cluster_templates.add(result["template"])
+                cluster_templates.add(result["template_mined"])
 
         # Store baseline templates
         self.baseline_clusters[baseline_key] = cluster_templates
@@ -106,13 +106,14 @@ class LogClusterer:
         for log_entry in failed_logs:
             # Test against baseline patterns
             result = self.drain.add_log_message(log_entry.message)
-            template = result["template"]
+            # template = result["template_mined"]
 
             # Check if this template is similar to any baseline template
-            is_baseline_pattern = any(
-                self._calculate_template_similarity(template, baseline_template) > 0.8
-                for baseline_template in baseline_templates
-            )
+            is_baseline_pattern = result["change_type"] == "cluster_created"
+            # is_baseline_pattern = any(
+            #     self._calculate_template_similarity(template, baseline_template) > 0.8
+            #     for baseline_template in baseline_templates
+            # )
 
             if not is_baseline_pattern:
                 anomalous_logs.append(log_entry)

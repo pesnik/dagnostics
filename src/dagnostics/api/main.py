@@ -37,6 +37,7 @@ class AnalyzeRequest(BaseModel):
     dag_id: str
     task_id: str
     run_id: str
+    try_number: int
     force_baseline_refresh: bool = False
 
 
@@ -88,6 +89,7 @@ def get_analyzer():
         username=config.airflow.username,
         password=config.airflow.password,
         db_connection=config.airflow.database_url,
+        verify_ssl=False,
     )
 
     # Accessing drain3.persistence_path directly via dot notation
@@ -160,7 +162,7 @@ async def analyze_task(
     """Analyze a specific task failure"""
     try:
         result = analyzer.analyze_task_failure(
-            request.dag_id, request.task_id, request.run_id
+            request.dag_id, request.task_id, request.run_id, request.try_number
         )
 
         return AnalyzeResponse(

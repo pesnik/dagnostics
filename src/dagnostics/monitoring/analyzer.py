@@ -35,7 +35,7 @@ class DAGAnalyzer:
         self.llm = llm
 
     def analyze_task_failure(
-        self, dag_id: str, task_id: str, run_id: str
+        self, dag_id: str, task_id: str, run_id: str, try_number: int
     ) -> AnalysisResult:
         """Complete analysis workflow for a single task failure"""
         start_time = datetime.now()
@@ -47,7 +47,7 @@ class DAGAnalyzer:
             baseline_comparison = self._ensure_baseline(dag_id, task_id)
 
             # Step 2: Collect failed task logs
-            failed_logs = self._collect_failed_logs(dag_id, task_id, run_id)
+            failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
 
             if not failed_logs:
                 return AnalysisResult(
@@ -170,19 +170,21 @@ class DAGAnalyzer:
         )
 
     def _collect_failed_logs(
-        self, dag_id: str, task_id: str, run_id: str
+        self, dag_id: str, task_id: str, run_id: str, try_number: int
     ) -> List[LogEntry]:
         """Collect and parse logs from failed task"""
         try:
-            logs_content = self.airflow_client.get_task_logs(dag_id, task_id, run_id)
+            logs_content = self.airflow_client.get_task_logs(
+                dag_id, task_id, run_id, try_number
+            )
             return self._parse_logs(
                 logs_content,
                 TaskInstance(
                     dag_id=dag_id,
                     task_id=task_id,
                     run_id=run_id,
-                    execution_date=datetime.now(),
                     state="failed",
+                    try_number=try_number,
                 ),
             )
         except Exception as e:

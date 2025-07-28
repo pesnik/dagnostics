@@ -37,3 +37,5 @@ data/*
 
 # Ignore dynaconf secret files
 .secrets.*
+
+!.vscode/example*

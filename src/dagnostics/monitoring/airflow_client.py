@@ -89,10 +89,10 @@ class AirflowDBClient:
                     dag_id=row.dag_id,
                     task_id=row.task_id,
                     run_id=row.run_id,
-                    execution_date=row.execution_date,
                     state=row.state,
                     start_date=row.start_date,
                     end_date=row.end_date,
+                    try_number=row.try_number,
                 )
                 for row in result
             ]
@@ -107,10 +107,10 @@ class AirflowDBClient:
             execution_date,
             state,
             start_date,
-            end_date
-        FROM task_instance
-        WHERE state = 'failed'
-        AND start_date >= NOW() - INTERVAL :minutes_back MINUTE
+            end_date,
+            try_number
+        FROM task_fail
+        WHERE start_date >= NOW() - INTERVAL :minutes_back MINUTE
         ORDER BY start_date DESC
         """
         return self._execute_query(query, {"minutes_back": minutes_back})
@@ -124,10 +124,10 @@ class AirflowDBClient:
             dag_id,
             task_id,
             run_id,
-            execution_date,
             state,
             start_date,
-            end_date
+            end_date,
+            try_number
         FROM task_instance
         WHERE dag_id = :dag_id
         AND task_id = :task_id

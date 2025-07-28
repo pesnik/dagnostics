@@ -49,6 +49,7 @@ def analyze(
             username=config.airflow.username,
             password=config.airflow.password,
             db_connection=config.airflow.database_url,
+            verify_ssl=False,
         )
 
         clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
@@ -80,7 +81,7 @@ def analyze(
 
         # Create analyzer and run analysis
         analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm)
-        result = analyzer.analyze_task_failure(dag_id, task_id, run_id)
+        result = analyzer.analyze_task_failure(dag_id, task_id, run_id, 1)
 
         # Output results
         if output_format == OutputFormat.json:

@@ -90,11 +90,11 @@ class TaskInstance(BaseModel):
     dag_id: str
     task_id: str
     run_id: str
-    execution_date: datetime
     state: str
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     log_url: Union[HttpUrl, Literal[""]] = ""
+    try_number: int
 
 
 class AirflowConfig(BaseModel):
