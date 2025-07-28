@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAGnostics - ETL Monitoring Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.5.0/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #666;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .stat-change {
+            font-size: 0.9rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .positive { background: #d4edda; color: #155724; }
+        .negative { background: #f8d7da; color: #721c24; }
+        .neutral { background: #e2e3e5; color: #383d41; }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .control-group input, .control-group select {
+            padding: 10px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .control-group input:focus, .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #495057;
+            border: 2px solid #e1e5e9;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .analysis-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .analysis-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .analysis-result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            background: #f8f9ff;
+        }
+
+        .error-details {
+            display: grid;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .error-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-critical { background: #fee; color: #c33; }
+        .severity-high { background: #fef5e7; color: #c85400; }
+        .severity-medium { background: #fff3cd; color: #856404; }
+        .severity-low { background: #d1ecf1; color: #0c5460; }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .recent-failures {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .failure-item {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 15px;
+            align-items: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: rgba(248, 249, 250, 0.8);
+            transition: background 0.3s ease;
+        }
+
+        .failure-item:hover {
+            background: rgba(233, 236, 239, 0.8);
+        }
+
+        .failure-time {
+            font-size: 0.8rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .failure-task {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .failure-error {
+            font-size: 0.9rem;
+            color: #666;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-running { background: #28a745; }
+        .status-stopped { background: #dc3545; }
+        .status-warning { background: #ffc107; }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .analysis-form {
+                grid-template-columns: 1fr;
+            }
+
+            .failure-item {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 DAGnostics</h1>
+            <p>Intelligent ETL Monitoring & Analysis Dashboard</p>
+        </div>
+
+        <!-- Monitor Status -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Monitor Status</h3>
+                <div class="stat-value" id="monitor-status">
+                    <span class="status-indicator status-running"></span>
+                    Running
+                </div>
+                <div class="stat-change neutral">Last check: <span id="last-check">--</span></div>
+            </div>
+            <div class="stat-card">
+                <h3>Today's Failures</h3>
+                <div class="stat-value" id="today-failures">--</div>
+                <div class="stat-change" id="failures-change">Loading...</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Processing Time</h3>
+                <div class="stat-value" id="avg-time">--</div>
+                <div class="stat-change positive">Efficient</div>
+            </div>
+            <div class="stat-card">
+                <h3>Resolution Rate</h3>
+                <div class="stat-value" id="resolution-rate">--</div>
+                <div class="stat-change positive" id="resolution-change">This week</div>
+            </div>
+        </div>
+
+        <!-- Analysis Section -->
+        <div class="analysis-section">
+            <h2 class="chart-title">🔬 Analyze Specific Task</h2>
+            <div class="analysis-form">
+                <div class="control-group">
+                    <label for="dag-id">DAG ID</label>
+                    <input type="text" id="dag-id" placeholder="my_etl_pipeline">
+                </div>
+                <div class="control-group">
+                    <label for="task-id">Task ID</label>
+                    <input type="text" id="task-id" placeholder="extract_data">
+                </div>
+                <div class="control-group">
+                    <label for="run-id">Run ID</label>
+                    <input type="text" id="run-id" placeholder="manual__2024-01-15T10:30:00">
+                </div>
+                <button class="btn btn-primary" onclick="analyzeTask()">
+                    <span id="analyze-btn-text">Analyze</span>
+                    <span id="analyze-spinner" class="loading" style="display: none;"></span>
+                </button>
+            </div>
+
+            <div id="analysis-result" style="display: none;"></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3 class="chart-title">📈 Error Trends (Last 7 Days)</h3>
+                <canvas id="trends-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 class="chart-title">📊 Error Categories</h3>
+                <canvas id="categories-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Failures -->
+        <div class="recent-failures">
+            <h3 class="chart-title">🚨 Recent Failures</h3>
+            <div id="recent-failures-list">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = 'http://localhost:8000/api/v1';
+
+        // Chart instances
+        let trendsChart, categoriesChart;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            loadDashboardData();
+
+            // Refresh data every 30 seconds
+            setInterval(loadDashboardData, 30000);
+        });
+
+        function initCharts() {
+            // Trends Chart
+            const trendsCtx = document.getElementById('trends-chart').getContext('2d');
+            trendsChart = new Chart(trendsCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Failed Tasks',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Categories Chart
+            const categoriesCtx = document.getElementById('categories-chart').getContext('2d');
+            categoriesChart = new Chart(categoriesCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#667eea',
+                            '#764ba2',
+                            '#f093fb',
+                            '#f5576c',
+                            '#4facfe',
+                            '#43e97b'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadDashboardData() {
+            try {
+                // Load monitor status
+                const statusResponse = await axios.get(`${API_BASE}/monitor/status`);
+                updateMonitorStatus(statusResponse.data);
+
+                // Load daily report
+                const reportResponse = await axios.get(`${API_BASE}/reports/daily`);
+                updateDashboardStats(reportResponse.data);
+                updateCharts(reportResponse.data);
+
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+                showError('Failed to load dashboard data');
+            }
+        }
+
+        function updateMonitorStatus(status) {
+            const statusElement = document.getElementById('monitor-status');
+            const lastCheckElement = document.getElementById('last-check');
+            const failuresElement = document.getElementById('today-failures');
+            const avgTimeElement = document.getElementById('avg-time');
+
+            if (status.is_running) {
+                statusElement.innerHTML = '<span class="status-indicator status-running"></span>Running';
+            } else {
+                statusElement.innerHTML = '<span class="status-indicator status-stopped"></span>Stopped';
+            }
+
+            if (status.last_check) {
+                const lastCheck = new Date(status.last_check);
+                lastCheckElement.textContent = lastCheck.toLocaleTimeString();
+            }
+
+            failuresElement.textContent = status.failed_tasks_count || 0;
+            avgTimeElement.textContent = `${status.average_processing_time?.toFixed(1) || 0}s`;
+        }
+
+        function updateDashboardStats(report) {
+            document.getElementById('today-failures').textContent = report.total_failures;
+
+            const resolutionRate = (report.resolution_rate * 100).toFixed(1);
+            document.getElementById('resolution-rate').textContent = `${resolutionRate}%`;
+
+            // Update failure change indicator
+            const changeElement = document.getElementById('failures-change');
+            if (report.total_failures > 10) {
+                changeElement.className = 'stat-change negative';
+                changeElement.textContent = 'High activity';
+            } else if (report.total_failures > 5) {
+                changeElement.className = 'stat-change neutral';
+                changeElement.textContent = 'Normal activity';
+            } else {
+                changeElement.className = 'stat-change positive';
+                changeElement.textContent = 'Low activity';
+            }
+        }
+
+        function updateCharts(report) {
+            // Update categories chart
+            const categories = Object.keys(report.categories);
+            const categoryData = Object.values(report.categories);
+
+            categoriesChart.data.labels = categories.map(cat =>
+                cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+            );
+            categoriesChart.data.datasets[0].data = categoryData;
+            categoriesChart.update();
+
+            // Update trends chart (mock data for demo)
+            const last7Days = Array.from({length: 7}, (_, i) => {
+                const date = new Date();
+                date.setDate(date.getDate() - (6 - i));
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+
+            const trendData = [3, 7, 5, 12, 8, 6, report.total_failures];
+
+            trendsChart.data.labels = last7Days;
+            trendsChart.data.datasets[0].data = trendData;
+            trendsChart.update();
+
+            // Update recent failures
+            updateRecentFailures(report.top_failing_dags);
+        }
+
+        function updateRecentFailures(topDags) {
+            const container = document.getElementById('recent-failures-list');
+
+            if (!topDags || topDags.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No recent failures</p>';
+                return;
+            }
+
+            container.innerHTML = topDags.map(dag => `
+                <div class="failure-item">
+                    <div class="failure-time">${new Date().toLocaleTimeString()}</div>
+                    <div class="failure-task">${dag.dag_id}</div>
+                    <div class="failure-error">${dag.failures} failures today</div>
+                    <button class="btn btn-secondary" onclick="analyzeDag('${dag.dag_id}')">Analyze</button>
+                </div>
+            `).join('');
+        }
+
+        async function analyzeTask() {
+            const dagId = document.getElementById('dag-id').value;
+            const taskId = document.getElementById('task-id').value;
+            const runId = document.getElementById('run-id').value;
+
+            if (!dagId || !taskId || !runId) {
+                showError('Please fill in all fields');
+                return;
+            }
+
+            // Show loading state
+            document.getElementById('analyze-btn-text').style.display = 'none';
+            document.getElementById('analyze-spinner').style.display = 'inline-block';
+
+            try {
+                const response = await axios.post(`${API_BASE}/analyze`, {
+                    dag_id: dagId,
+                    task_id: taskId,
+                    run_id: runId
+                });
+
+                displayAnalysisResult(response.data);
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                showError('Analysis failed: ' + (error.response?.data?.detail || error.message));
+            } finally {
+                // Hide loading state
+                document.getElementById('analyze-btn-text').style.display = 'inline';
+                document.getElementById('analyze-spinner').style.display = 'none';
+            }
+        }
+
+        function displayAnalysisResult(result) {
+            const container = document.getElementById('analysis-result');
+
+            if (!result.success) {
+                container.innerHTML = `
+                    <div class="analysis-result" style="border-left-color: #dc3545; background: #fff5f5;">
+                        <h4 style="color: #c33;">❌ Analysis Failed</h4>
+                        <p>${result.error_message || 'Unknown error occurred'}</p>
+                    </div>
+                `;
+                container.style.display = 'block';
+                return;
+            }
+
+            const severityClass = `severity-${result.severity}`;
+            const confidencePercent = (result.confidence * 100).toFixed(1);
+
+            container.innerHTML = `
+                <div class="analysis-result">
+                    <h4>✅ Analysis Complete</h4>
+                    <div class="error-details">
+                        <div>
+                            <strong>Error:</strong> ${result.error_message}
+                        </div>
+                        <div>
+                            <strong>Category:</strong>
+                            <span class="error-badge ${severityClass}">${result.category}</span>
+                        </div>
+                        <div>
+                            <strong>Severity:</strong>
+                            <span class="error-badge ${severityClass}">${result.severity}</span>
+                        </div>
+                        <div>
+                            <strong>Confidence:</strong> ${confidencePercent}%
+                        </div>
+                        <div>
+                            <strong>Processing Time:</strong> ${result.processing_time.toFixed(2)}s
+                        </div>
+                        ${result.suggested_actions.length > 0 ? `
+                        <div>
+                            <strong>Suggested Actions:</strong>
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                ${result.suggested_actions.map(action => `<li>${action}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            container.style.display = 'block';
+        }
+
+        function analyzeDag(dagId) {
+            document.getElementById('dag-id').value = dagId;
+            document.getElementById('dag-id').focus();
+        }
+
+        function showError(message) {
+            // Simple error display - you might want to use a toast library
+            alert('Error: ' + message);
+        }
+
+        // Auto-resize charts
+        window.addEventListener('resize', function() {
+            if (trendsChart) trendsChart.resize();
+            if (categoriesChart) categoriesChart.resize();
+        });
+    </script>
+</body>
+</html>

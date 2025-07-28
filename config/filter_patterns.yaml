@@ -1,0 +1,59 @@
+filter_patterns:
+  # Timestamp and separator patterns
+  - '^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}'
+  - '^={3,}|^-{3,}|\*{3,}'
+
+  # Airflow specific patterns
+  - '.*Marking task as SUCCESS.*'
+  - '.*Task exited with return code 0.*'
+  - '.*Dependencies all met for.*'
+  - '.*Starting attempt \d+ of \d+.*'
+  - '.*Executing.*in executor.*'
+  - '.*Job.*completed successfully.*'
+
+  # Python/System patterns
+  - '.*site-packages.*'
+  - '.*UserWarning.*'
+  - '.*DeprecationWarning.*'
+  - '.*FutureWarning.*'
+  - '.*INFO.*pandas.*'
+  - '.*DEBUG.*urllib3.*'
+
+  # Database connection patterns (non-error)
+  - '.*Establishing connection.*'
+  - '.*Connection pool created.*'
+  - '.*Database connection successful.*'
+
+  # Generic informational patterns
+  - '.*Starting.*process.*'
+  - '.*Finished.*process.*'
+  - '.*Loading.*configuration.*'
+  - '.*Initializing.*'
+
+error_indicators:
+  critical:
+    - "fatal"
+    - "critical"
+    - "panic"
+    - "abort"
+
+  high:
+    - "error"
+    - "exception"
+    - "traceback"
+    - "stack trace"
+    - "failed"
+    - "failure"
+
+  medium:
+    - "warning"
+    - "timeout"
+    - "connection refused"
+    - "permission denied"
+    - "not found"
+    - "invalid"
+
+  low:
+    - "deprecated"
+    - "retrying"
+    - "skipping"

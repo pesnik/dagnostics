@@ -1,62 +1,87 @@
-app:
-  name: "DAGnostics"
-  version: "0.1.0"
-  description: "DAG monitoring and diagnostics system"
+airflow:
+  base_url: "${AIRFLOW_BASE_URL}"
+  username: "${AIRFLOW_USERNAME}"
+  password: "${AIRFLOW_PASSWORD}"
+  database_url: "${AIRFLOW_DB_URL}"
+  verify_ssl: false
+  timeout: 30
+
+drain3:
+  depth: 4
+  sim_th: 0.4
+  max_children: 100
+  max_clusters: 1000
+  extra_delimiters: ["=", ":", ",", "!", "(", ")", "[", "]", "<", ">"]
+  persistence_path: "data/clusters/drain3_state.pkl"
+
+llm:
+  default_provider: "ollama"
+  providers:
+    ollama:
+      base_url: "http://localhost:11434"
+      model: "mistral"
+      temperature: 0.1
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-3.5-turbo"
+      temperature: 0.1
+    anthropic:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-sonnet-20240229"
+      temperature: 0.1
 
 monitoring:
-  interval: 60
+  check_interval_minutes: 5
+  baseline_success_count: 3
+  max_log_lines: 1000
+  failed_task_lookback_hours: 24
+  baseline_refresh_days: 7
 
-  log_path: "/var/log/airflow"
+log_processing:
+  max_log_size_mb: 10
+  chunk_size_lines: 1000
+  timeout_seconds: 30
 
-  patterns:
-    - "*.log"
-    - "dag_*.log"
-    - "scheduler.log"
+pattern_filtering:
+  config_path: "config/filter_patterns.yaml"
+  custom_patterns_enabled: true
 
-  error_patterns:
-    - "ERROR"
-    - "CRITICAL"
-    - "Failed"
-    - "Exception"
-
-  retry:
-    max_attempts: 3
-    backoff_factor: 2
-    timeout: 30
+alerts:
+  sms:
+    enabled: true
+    provider: "twilio"
+    account_sid: "${TWILIO_ACCOUNT_SID}"
+    auth_token: "${TWILIO_AUTH_TOKEN}"
+    from_number: "${TWILIO_FROM_NUMBER}"
+  email:
+    enabled: true
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    username: "${EMAIL_USERNAME}"
+    password: "${EMAIL_PASSWORD}"
+    from_address: "${EMAIL_FROM_ADDRESS}"
 
 reporting:
-  format: "json"
-
-  output_dir: "./reports"
-
-  frequency: "daily"
-
-  email:
-    enabled: false
-    smtp_server: "localhost"
-    smtp_port: 587
-    username: ""
-    password: ""
-    recipients: []
-
-  slack:
-    enabled: false
-    webhook_url: ""
-    channel: "#alerts"
+  output_dir: "reports"
+  daily_report_time: "08:00"
+  retention_days: 30
+  formats: ["html", "json", "pdf"]
 
 database:
-  enabled: false
-  type: "sqlite"  # sqlite, postgresql, mysql
-  host: "localhost"
-  port: 5432
-  name: "dagnostics"
-  username: ""
-  password: ""
+  url: "${DAGNOSTICS_DB_URL:-sqlite:///data/dagnostics.db}"
+  echo: false
+  pool_size: 10
+  max_overflow: 20
 
 api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  reload: false
+  log_level: "info"
+
+web:
   enabled: true
   host: "0.0.0.0"
   port: 8080
   debug: false
-
-log_level: "INFO"

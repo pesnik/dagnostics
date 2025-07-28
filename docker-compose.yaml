@@ -1,0 +1,90 @@
+services:
+  dagnostics-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - AIRFLOW_USERNAME=${AIRFLOW_USERNAME}
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD}
+      - AIRFLOW_DB_URL=${AIRFLOW_DB_URL}
+      - DAGNOSTICS_DB_URL=postgresql://dagnostics:password@postgres:5432/dagnostics
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - ollama
+    restart: unless-stopped
+
+  dagnostics-monitor:
+    build: .
+    command: ["uv", "run", "dagnostics", "monitor", "--interval", "5", "--daemon"]
+    environment:
+      - AIRFLOW_USERNAME=${AIRFLOW_USERNAME}
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD}
+      - AIRFLOW_DB_URL=${AIRFLOW_DB_URL}
+      - DAGNOSTICS_DB_URL=postgresql://dagnostics:password@postgres:5432/dagnostics
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - ollama
+    restart: unless-stopped
+
+  dagnostics-web:
+    build: .
+    command: ["python", "-m", "http.server", "8080", "--directory", "web/static"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./web:/app/web
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=dagnostics
+      - POSTGRES_USER=dagnostics
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    command: serve
+
+  # Optional: Ollama model puller
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["ollama", "pull", "mistral"]
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:
+  redis_data:
