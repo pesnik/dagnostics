@@ -117,7 +117,7 @@ class DAGAnalyzer:
     def extract_task_error_for_sms(
         self, dag_id: str, task_id: str, run_id: str, try_number: int
     ) -> str:
-        """Extract error line for SMS notifications using LLM analysis"""
+        """Extract error line for SMS notifications using Drain3 clustering and LLM analysis"""
         try:
             logger.info(f"Extracting error for SMS: {dag_id}.{task_id}.{run_id}")
 
@@ -127,8 +127,19 @@ class DAGAnalyzer:
             if not failed_logs:
                 return f"{dag_id}.{task_id}: No logs found"
 
-            # Use LLM-based error extraction for SMS notifications
-            error_line = self.llm.extract_error_line(failed_logs)
+            # Step 1: Identify anomalous patterns using Drain3
+            anomalous_logs = self.clusterer.identify_anomalous_patterns(
+                failed_logs, dag_id, task_id
+            )
+
+            # Step 2: Filter known non-error patterns
+            error_candidates = self.filter.filter_candidates(anomalous_logs)
+
+            if not error_candidates:
+                return f"{dag_id}.{task_id}: No error patterns identified"
+
+            # Step 3: Use LLM to extract error message from filtered logs
+            error_line = self.llm.extract_error_line(error_candidates)
 
             return f"{dag_id}.{task_id}: {error_line}"
 

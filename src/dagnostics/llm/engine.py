@@ -271,16 +271,18 @@ class LLMEngine:
             return self._create_fallback_analysis(log_entries, str(e))
 
     def extract_error_line(self, log_entries: List[LogEntry]) -> str:
-        """Extract the exact error line for SMS notifications using LLM analysis"""
+        """Extract the exact error line for SMS notifications from filtered log candidates"""
 
         if not log_entries:
             return "No error details available"
 
-        # Prepare log context (last 10 entries for SMS)
+        # Prepare log context from filtered candidates (these are already relevant)
         log_context = "\n".join(
             [
                 f"[{entry.timestamp}] {entry.level}: {entry.message}"
-                for entry in log_entries[-10:]  # Last 10 entries for context
+                for entry in log_entries[
+                    -5:
+                ]  # Last 5 entries since they're already filtered
             ]
         )
 
