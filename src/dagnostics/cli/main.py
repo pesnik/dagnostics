@@ -6,7 +6,8 @@ from .commands import analyze, report, start
 
 setup_logging()
 
-app = typer.Typer()
+app = typer.Typer(help="DAGnostics - Intelligent ETL Monitoring System CLI")
+
 
 app.command()(start)
 app.command()(analyze)
