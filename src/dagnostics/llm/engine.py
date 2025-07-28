@@ -2,7 +2,10 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Union
+
+import requests
+from pydantic import HttpUrl
 
 from dagnostics.core.models import ErrorAnalysis, ErrorCategory, ErrorSeverity, LogEntry
 
@@ -21,16 +24,15 @@ class OllamaProvider(LLMProvider):
     """Ollama LLM provider"""
 
     def __init__(
-        self, base_url: str = "http://localhost:11434", model: str = "mistral"
+        self,
+        base_url: Union[str, HttpUrl] = "http://localhost:11434",
+        model: str = "mistral",
     ):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = str(base_url).rstrip("/")
         self.model = model
 
     def generate_response(self, prompt: str, **kwargs) -> str:
-        import requests
-
         payload = {"model": self.model, "prompt": prompt, "stream": False, **kwargs}
-
         try:
             response = requests.post(
                 f"{self.base_url}/api/generate", json=payload, timeout=60

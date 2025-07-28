@@ -34,3 +34,6 @@ logs/
 data/*
 !data/**/.gitkeep
 !/data/README.md
+
+# Ignore dynaconf secret files
+.secrets.*

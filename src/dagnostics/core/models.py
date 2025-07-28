@@ -1,8 +1,10 @@
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Union  # Added Dict, Any for config types
+from pathlib import Path
+from typing import Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
 
 class ErrorSeverity(Enum):
@@ -22,8 +24,7 @@ class ErrorCategory(Enum):
     UNKNOWN = "unknown"
 
 
-@dataclass
-class LogEntry:
+class LogEntry(BaseModel):
     timestamp: datetime
     level: str
     message: str
@@ -35,8 +36,7 @@ class LogEntry:
     raw_content: str = ""
 
 
-@dataclass
-class DrainCluster:
+class DrainCluster(BaseModel):
     cluster_id: str
     template: str
     log_ids: List[str]
@@ -45,8 +45,7 @@ class DrainCluster:
     last_updated: datetime
 
 
-@dataclass
-class BaselineCluster:
+class BaselineCluster(BaseModel):
     cluster_id: str
     template: str
     log_count: int
@@ -56,42 +55,38 @@ class BaselineCluster:
     confidence_score: float = 0.0
 
 
-@dataclass
-class ErrorAnalysis:
+class ErrorAnalysis(BaseModel):
     error_message: str
     confidence: float
     category: ErrorCategory
     severity: ErrorSeverity
     suggested_actions: List[str]
-    related_logs: List[LogEntry]
-    raw_error_lines: List[str] = field(default_factory=list)
+    related_logs: List[LogEntry] = Field(default_factory=list)
+    raw_error_lines: List[str] = Field(default_factory=list)
     llm_reasoning: str = ""
 
 
-@dataclass
-class BaselineComparison:
+class BaselineComparison(BaseModel):
     is_known_pattern: bool
     similar_clusters: List[str]
     novelty_score: float
     baseline_age_days: int
 
 
-@dataclass
-class AnalysisResult:
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+class AnalysisResult(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     dag_id: str = ""
     task_id: str = ""
     run_id: str = ""
     analysis: Optional[ErrorAnalysis] = None
     baseline_comparison: Optional[BaselineComparison] = None
     processing_time: float = 0.0
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = Field(default_factory=datetime.now)
     success: bool = True
     error_message: str = ""
 
 
-@dataclass
-class TaskInstance:
+class TaskInstance(BaseModel):
     dag_id: str
     task_id: str
     run_id: str
@@ -99,150 +94,134 @@ class TaskInstance:
     state: str
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    log_url: str = ""
+    log_url: Union[HttpUrl, Literal[""]] = ""
 
 
-@dataclass
-class AirflowConfig:
-    base_url: str
+class AirflowConfig(BaseModel):
+    base_url: HttpUrl
     username: str
     password: str
     database_url: str
-    verify_ssl: bool
-    timeout: int
+    verify_ssl: bool = True
+    timeout: int = Field(..., ge=1)
 
 
-@dataclass
-class Drain3Config:
-    depth: int
-    sim_th: float
-    max_children: int
-    max_clusters: int
-    extra_delimiters: List[str]
+class Drain3Config(BaseModel):
+    depth: int = Field(..., ge=0)
+    sim_th: float = Field(..., ge=0.0, le=1.0)
+    max_children: int = Field(..., ge=1)
+    max_clusters: int = Field(..., ge=1)
+    extra_delimiters: List[str] = Field(default_factory=list)
     persistence_path: str
 
 
-@dataclass
-class OllamaLLMConfig:
-    base_url: str
+class OllamaLLMConfig(BaseModel):
+    base_url: HttpUrl
     model: str
-    temperature: float
+    temperature: float = Field(..., ge=0.0, le=1.0)
 
 
-@dataclass
-class OpenAILLMConfig:
-    api_key: str
+class OpenAILLMConfig(BaseModel):
+    api_key: str = Field(..., min_length=1)
     model: str
-    temperature: float
-    base_url: Optional[str] = None
+    temperature: float = Field(..., ge=0.0, le=1.0)
+    base_url: Optional[HttpUrl] = None
 
 
-@dataclass
-class AnthropicLLMConfig:
-    api_key: str
+class AnthropicLLMConfig(BaseModel):
+    api_key: str = Field(..., min_length=1)
     model: str
-    temperature: float
-    base_url: Optional[str] = None
+    temperature: float = Field(..., ge=0.0, le=1.0)
+    base_url: Optional[HttpUrl] = None
 
 
-@dataclass
-class LLMConfig:
+class LLMConfig(BaseModel):
     default_provider: str
+
     providers: Dict[str, Union[OllamaLLMConfig, OpenAILLMConfig, AnthropicLLMConfig]]
 
 
-@dataclass
-class MonitoringConfig:
-    check_interval_minutes: int
-    baseline_success_count: int
-    max_log_lines: int
-    failed_task_lookback_hours: int
-    baseline_refresh_days: int
+class MonitoringConfig(BaseModel):
+    check_interval_minutes: int = Field(..., ge=1)
+    baseline_success_count: int = Field(..., ge=0)
+    max_log_lines: int = Field(..., ge=1)
+    failed_task_lookback_hours: int = Field(..., ge=0)
+    baseline_refresh_days: int = Field(..., ge=1)
 
 
-@dataclass
-class LogProcessingConfig:
-    max_log_size_mb: int
-    chunk_size_lines: int
-    timeout_seconds: int
+class LogProcessingConfig(BaseModel):
+    max_log_size_mb: int = Field(..., ge=1)
+    chunk_size_lines: int = Field(..., ge=1)
+    timeout_seconds: int = Field(..., ge=1)
 
 
-@dataclass
-class PatternFilteringConfig:
+class PatternFilteringConfig(BaseModel):
     config_path: str
     custom_patterns_enabled: bool
 
 
-@dataclass
-class SMSAlertConfig:
+class SMSAlertConfig(BaseModel):
     enabled: bool
     provider: str
-    account_sid: str
-    auth_token: str
-    from_number: str
+    account_sid: str = ""
+    auth_token: str = ""
+    from_number: str = ""
 
 
-@dataclass
-class EmailAlertConfig:
+class EmailAlertConfig(BaseModel):
     enabled: bool
     smtp_server: str
-    smtp_port: int
+    smtp_port: int = Field(..., gt=0)
     username: str
     password: str
-    from_address: str
+    from_address: EmailStr
 
 
-@dataclass
-class AlertsConfig:
+class AlertsConfig(BaseModel):
     sms: SMSAlertConfig
     email: EmailAlertConfig
 
 
-@dataclass
-class ReportingConfig:
-    output_dir: str
+class ReportingConfig(BaseModel):
+    output_dir: Path
     daily_report_time: str
-    retention_days: int
+    retention_days: int = Field(..., ge=0)
     formats: List[str]
 
 
-@dataclass
-class DatabaseConfig:
+class DatabaseConfig(BaseModel):
     url: str
     echo: bool
-    pool_size: int
-    max_overflow: int
+    pool_size: int = Field(..., ge=1)
+    max_overflow: int = Field(..., ge=0)
 
 
-@dataclass
-class APIConfig:
+class APIConfig(BaseModel):
     host: str
-    port: int
-    workers: int
+    port: int = Field(..., gt=0, le=65535)
+    workers: int = Field(..., ge=1)
     reload: bool
-    log_level: str
+    log_level: str  # Consider Enum for allowed log levels (e.g., "INFO", "DEBUG")
 
 
-@dataclass
-class WebConfig:
+class WebConfig(BaseModel):
     enabled: bool
     host: str
-    port: int
+    port: int = Field(..., gt=0, le=65535)
     debug: bool
 
 
-@dataclass
-class AppConfig:
+class AppConfig(BaseModel):
     """Main application configuration structure."""
 
     airflow: AirflowConfig
     drain3: Drain3Config
     llm: LLMConfig
-    monitoring: "MonitoringConfig"
-    log_processing: "LogProcessingConfig"
-    pattern_filtering: "PatternFilteringConfig"
-    alerts: "AlertsConfig"
-    reporting: "ReportingConfig"
-    database: "DatabaseConfig"
-    api: "APIConfig"
-    web: "WebConfig"
+    monitoring: MonitoringConfig
+    log_processing: LogProcessingConfig
+    pattern_filtering: PatternFilteringConfig
+    alerts: AlertsConfig
+    reporting: ReportingConfig
+    database: DatabaseConfig
+    api: APIConfig
+    web: WebConfig
