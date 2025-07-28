@@ -234,6 +234,9 @@ def notify_failures(
         "-l",
         help="LLM provider to use (ollama, openai, anthropic, gemini)",
     ),
+    use_stored_baseline: bool = Option(
+        True, "--use-stored-baseline", help="Use stored baseline state (vs on-the-fly)"
+    ),
 ):
     """
     Analyze recent Airflow task failures and send concise SMS notifications.
@@ -260,7 +263,14 @@ def notify_failures(
         db_connection=config.airflow.database_url,
         verify_ssl=False,
     )
-    clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+
+    # Configure baseline usage
+    if use_stored_baseline:
+        clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+    else:
+        # On-the-fly baseline: don't use persistence
+        clusterer = LogClusterer(persistence_path=None)
+
     filter = ErrorPatternFilter()
 
     # LLM provider selection (reuse logic from analyze)
@@ -347,14 +357,10 @@ def notify_failures(
 
     for task in failed_tasks:
         try:
-            result = analyzer.analyze_task_failure(
+            # Use lightweight error extraction for SMS notifications (no LLM analysis)
+            summary = analyzer.extract_task_error(
                 task.dag_id, task.task_id, task.run_id, task.try_number
             )
-            # Extract a concise error summary (customize as needed)
-            if result.analysis and result.analysis.error_message:
-                summary = f"{task.dag_id}.{task.task_id} failed: {result.analysis.error_message}"
-            else:
-                summary = f"{task.dag_id}.{task.task_id} failed."
             recipients = get_recipients_for_task(task)
             if dry_run:
                 typer.echo(f"[DRY RUN] Would send to {recipients}: {summary}")

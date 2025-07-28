@@ -43,6 +43,7 @@ monitoring:
   max_log_lines: 1000
   failed_task_lookback_hours: 24
   baseline_refresh_days: 7
+  baseline_usage: "stored"  # Options: "stored" or "real_time"
 
 log_processing:
   max_log_size_mb: 10

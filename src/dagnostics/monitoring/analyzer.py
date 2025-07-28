@@ -114,6 +114,30 @@ class DAGAnalyzer:
                 processing_time=(datetime.now() - start_time).total_seconds(),
             )
 
+    def extract_task_error(
+        self, dag_id: str, task_id: str, run_id: str, try_number: int
+    ) -> str:
+        """Extract error line for SMS notifications (lightweight, no LLM analysis)"""
+        try:
+            logger.info(f"Extracting error for {dag_id}.{task_id}.{run_id}")
+
+            # Collect failed task logs
+            failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
+
+            if not failed_logs:
+                return f"{dag_id}.{task_id}: No logs found"
+
+            # Use simple error extraction (no LLM, no categorization, no resolution)
+            error_line = self.llm.extract_error_line(failed_logs)
+
+            return f"{dag_id}.{task_id}: {error_line}"
+
+        except Exception as e:
+            logger.error(
+                f"Error extraction failed for {dag_id}.{task_id}.{run_id}: {e}"
+            )
+            return f"{dag_id}.{task_id}: Analysis failed - {str(e)}"
+
     def _ensure_baseline(self, dag_id: str, task_id: str) -> BaselineComparison:
         """Ensure baseline exists for the given dag/task"""
         baseline_key = f"{dag_id}.{task_id}"

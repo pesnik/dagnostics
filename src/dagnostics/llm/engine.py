@@ -8,6 +8,11 @@ import requests
 from pydantic import HttpUrl
 
 from dagnostics.core.models import ErrorAnalysis, ErrorCategory, ErrorSeverity, LogEntry
+from dagnostics.llm.prompts import (
+    get_categorization_prompt,
+    get_error_extraction_prompt,
+    get_resolution_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +221,6 @@ class LLMEngine:
 
     def __init__(self, provider: LLMProvider):
         self.provider = provider
-        self.error_extraction_prompt = self._load_error_extraction_prompt()
-        self.categorization_prompt = self._load_categorization_prompt()
 
     def extract_error_message(self, log_entries: List[LogEntry]) -> ErrorAnalysis:
         """Extract and analyze error from log entries"""
@@ -230,10 +233,22 @@ class LLMEngine:
             ]
         )
 
-        prompt = self.error_extraction_prompt.format(
+        # Determine provider type for prompt customization
+        provider_type = None
+        if isinstance(self.provider, GeminiProvider):
+            provider_type = "gemini"
+        elif isinstance(self.provider, OpenAIProvider):
+            provider_type = "openai"
+        elif isinstance(self.provider, AnthropicProvider):
+            provider_type = "anthropic"
+        elif isinstance(self.provider, OllamaProvider):
+            provider_type = "ollama"
+
+        prompt = get_error_extraction_prompt(
             log_context=log_context,
             dag_id=log_entries[0].dag_id if log_entries else "unknown",
             task_id=log_entries[0].task_id if log_entries else "unknown",
+            provider_type=provider_type,
         )
 
         try:
@@ -254,12 +269,38 @@ class LLMEngine:
             logger.error(f"Error extraction failed: {e}")
             return self._create_fallback_analysis(log_entries, str(e))
 
+    def extract_error_line(self, log_entries: List[LogEntry]) -> str:
+        """Extract the exact error line for SMS notifications (lightweight)"""
+
+        # Simple heuristic: find the first ERROR/CRITICAL/FATAL level log
+        for entry in log_entries:
+            if entry.level.upper() in ["ERROR", "CRITICAL", "FATAL"]:
+                return entry.message
+
+        # If no ERROR level found, look for error keywords
+        error_keywords = [
+            "error",
+            "exception",
+            "failed",
+            "failure",
+            "fatal",
+            "critical",
+        ]
+        for entry in log_entries:
+            message_lower = entry.message.lower()
+            if any(keyword in message_lower for keyword in error_keywords):
+                return entry.message
+
+        # Fallback: return the last log entry
+        if log_entries:
+            return log_entries[-1].message
+
+        return "No error details available"
+
     def categorize_error(self, error_message: str, context: str = "") -> ErrorCategory:
         """Categorize error into predefined categories"""
 
-        prompt = self.categorization_prompt.format(
-            error_message=error_message, context=context
-        )
+        prompt = get_categorization_prompt(error_message=error_message, context=context)
 
         try:
             response = self.provider.generate_response(prompt, temperature=0.0)
@@ -271,18 +312,11 @@ class LLMEngine:
     def suggest_resolution(self, error_analysis: ErrorAnalysis) -> List[str]:
         """Suggest resolution steps based on error analysis"""
 
-        resolution_prompt = f"""
-Based on the following error analysis, provide 3-5 specific, actionable resolution steps:
-
-Error: {error_analysis.error_message}
-Category: {error_analysis.category.value}
-Severity: {error_analysis.severity.value}
-
-Provide resolution steps as a numbered list. Be specific and technical.
-Focus on root cause resolution, not just symptoms.
-
-Resolution Steps:
-"""
+        resolution_prompt = get_resolution_prompt(
+            error_message=error_analysis.error_message,
+            category=error_analysis.category.value,
+            severity=error_analysis.severity.value,
+        )
 
         try:
             # Use slightly higher temperature for more creative resolution suggestions
@@ -299,62 +333,6 @@ Resolution Steps:
                 "Check system logs",
                 "Contact support",
             ]
-
-    def _load_error_extraction_prompt(self) -> str:
-        # Enhanced prompt with better instructions for different LLM providers
-        base_prompt = """
-You are an expert ETL engineer analyzing Airflow task failure logs. Your job is to identify the root cause error from noisy log data.
-
-Log Context:
-{log_context}
-
-DAG ID: {dag_id}
-Task ID: {task_id}
-
-Instructions:
-1. Identify the PRIMARY error that caused the task failure
-2. Ignore informational, debug, or warning messages unless they're the root cause
-3. Focus on the MOST RELEVANT error line(s)
-4. Provide confidence score (0.0-1.0)
-5. Suggest error category and severity
-
-Respond in JSON format:
-{{
-    "error_message": "Exact error message that caused the failure",
-    "confidence": 0.85,
-    "category": "resource_error|data_quality|dependency_failure|configuration_error|permission_error|timeout_error|unknown",
-    "severity": "low|medium|high|critical",
-    "reasoning": "Brief explanation of why this is the root cause",
-    "error_lines": ["specific log lines that contain the error"]
-}}"""
-
-        # Add provider-specific instructions
-        if isinstance(self.provider, GeminiProvider):
-            return (
-                base_prompt
-                + "\n\nIMPORTANT: Respond with valid JSON only. Do not include any markdown formatting or code blocks."
-            )
-
-        return base_prompt
-
-    def _load_categorization_prompt(self) -> str:
-        return """
-Categorize this error into one of the following categories:
-
-Error: {error_message}
-Context: {context}
-
-Categories:
-- resource_error: Memory, CPU, disk space, connection limits
-- data_quality: Bad data, schema mismatches, validation failures
-- dependency_failure: Upstream task failures, external service unavailable
-- configuration_error: Wrong settings, missing parameters, bad configs
-- permission_error: Access denied, authentication failures
-- timeout_error: Operations taking too long, deadlocks
-- unknown: Cannot determine category
-
-Respond with just the category name (e.g., "resource_error").
-"""
 
     def _parse_error_analysis_response(
         self, response: str, log_entries: List[LogEntry]

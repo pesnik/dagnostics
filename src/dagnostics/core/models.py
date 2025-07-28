@@ -24,6 +24,11 @@ class ErrorCategory(Enum):
     UNKNOWN = "unknown"
 
 
+class BaselineUsage(str, Enum):
+    STORED = "stored"
+    REAL_TIME = "real_time"
+
+
 class LogEntry(BaseModel):
     timestamp: datetime
     level: str
@@ -158,6 +163,7 @@ class MonitoringConfig(BaseModel):
     max_log_lines: int = Field(..., ge=1)
     failed_task_lookback_hours: int = Field(..., ge=0)
     baseline_refresh_days: int = Field(..., ge=1)
+    baseline_usage: BaselineUsage = BaselineUsage.STORED
 
 
 class LogProcessingConfig(BaseModel):
