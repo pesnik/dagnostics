@@ -25,7 +25,7 @@ def analyze(
     dag_id: str = Argument(..., help="ID of the DAG to analyze"),
     task_id: str = Argument(..., help="ID of the task to analyze"),
     run_id: str = Argument(..., help="Run ID of the task instance"),
-    try_number: int = Argument(..., help="Attempt number of the failed log"),
+    try_number: int = Argument(..., help="Attempt number of the task to analyze"),
     output_format: OutputFormat = Option(
         OutputFormat.json, "--format", "-f", help="Output format"
     ),
