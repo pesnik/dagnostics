@@ -25,6 +25,7 @@ def analyze(
     dag_id: str = Argument(..., help="ID of the DAG to analyze"),
     task_id: str = Argument(..., help="ID of the task to analyze"),
     run_id: str = Argument(..., help="Run ID of the task instance"),
+    try_number: int = Argument(..., help="Attempt number of the failed log"),
     output_format: OutputFormat = Option(
         OutputFormat.json, "--format", "-f", help="Output format"
     ),
@@ -147,7 +148,7 @@ def analyze(
 
         # Create analyzer and run analysis
         analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm)
-        result = analyzer.analyze_task_failure(dag_id, task_id, run_id, 1)
+        result = analyzer.analyze_task_failure(dag_id, task_id, run_id, try_number)
 
         # Output results
         if output_format == OutputFormat.json:
