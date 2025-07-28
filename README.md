@@ -73,26 +73,46 @@ cp config/config.yaml.example config/config.yaml
 
 ```
 dagnostics/
-├── data/                   # Directory for pre-collected data (added)
-│   ├── raw/                # Raw data files
-│   ├── processed/          # Processed data files
-│   └── README.md           # Documentation for the data
-├── src/
-│   └── dagnostics/
-│       ├── core/           # Core functionality and config
-│       ├── llm/            # LLM integration and parsing
-│       ├── monitoring/     # Log collection and analysis
-│       ├── reporting/      # Report generation
-│       ├── utils/          # Shared utilities
-│       └── cli/            # Command-line interface
-├── tests/                  # Test suite
-├── config/                 # Configuration files
-├── docs/                   # Documentation
-├── scripts/                # Utility scripts
-├── tasks/                  # Development tasks (Invoke)
-├── .github/                # GitHub Actions
-├── pyproject.toml          # Project metadata and dependencies
-└── README.md
+├── data/
+│   ├── clusters/              # Drain3 cluster persistence
+│   ├── baselines/            # Baseline cluster data
+│   ├── raw/
+│   └── processed/
+├── src/dagnostics/
+│   ├── api/                  # FastAPI application (NEW)
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── routes/
+│   │   └── schemas.py
+│   ├── core/
+│   │   ├── models.py         # Enhanced with new data models
+│   │   └── config.py         # Extended configuration
+│   ├── llm/
+│   │   ├── log_clusterer.py  # Drain3 integration (NEW)
+│   │   ├── pattern_filter.py # Error pattern filtering (NEW)
+│   │   ├── engine.py         # Enhanced LLM engine
+│   │   ├── providers/        # LLM provider implementations (NEW)
+│   │   └── prompts.py
+│   ├── monitoring/
+│   │   ├── airflow_client.py # Airflow integration (NEW)
+│   │   ├── collector.py      # Enhanced log collection
+│   │   ├── analyzer.py       # Main analysis logic (NEW)
+│   │   ├── monitor.py        # Continuous monitoring (NEW)
+│   │   └── alert.py
+│   ├── reporting/
+│   │   ├── generator.py      # Enhanced reporting
+│   │   ├── exporters.py      # Multiple export formats (NEW)
+│   │   └── templates/
+│   ├── web/                  # Web dashboard (NEW)
+│   │   ├── static/
+│   │   ├── templates/
+│   │   └── app.py
+│   └── utils/
+├── config/
+│   ├── drain3_config.yaml    # Drain3 configuration (NEW)
+│   ├── llm_providers.yaml    # LLM provider configs (NEW)
+│   └── monitoring.yaml       # Monitoring settings (NEW)
+└── migrations/               # Database migrations (NEW)
 ```
 
 -----
