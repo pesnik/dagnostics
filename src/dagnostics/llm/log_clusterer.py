@@ -38,6 +38,9 @@ class LogClusterer:
 
         self.persistence_path = persistence_path
         self.baseline_clusters: Dict[str, Set[str]] = {}
+        self.baseline_timestamps: Dict[str, datetime] = (
+            {}
+        )  # Track baseline creation times
         self.load_baseline_state()
 
     def build_baseline_clusters(
@@ -72,6 +75,7 @@ class LogClusterer:
 
         # Store baseline templates
         self.baseline_clusters[baseline_key] = cluster_templates
+        self.baseline_timestamps[baseline_key] = datetime.now()
 
         # Convert to DrainCluster objects
         clusters = {}
@@ -89,6 +93,43 @@ class LogClusterer:
         self.save_baseline_state()
         logger.info(f"Created {len(clusters)} baseline clusters for {baseline_key}")
         return clusters
+
+    def is_baseline_stale(self, dag_id: str, task_id: str, refresh_days: int) -> bool:
+        """Check if baseline is stale and needs refresh"""
+        baseline_key = f"{dag_id}.{task_id}"
+
+        if baseline_key not in self.baseline_timestamps:
+            return True  # No baseline exists, needs creation
+
+        baseline_age = datetime.now() - self.baseline_timestamps[baseline_key]
+        baseline_age_days = baseline_age.days
+
+        return baseline_age_days >= refresh_days
+
+    def get_baseline_age_days(self, dag_id: str, task_id: str) -> int:
+        """Get the age of baseline in days"""
+        baseline_key = f"{dag_id}.{task_id}"
+
+        if baseline_key not in self.baseline_timestamps:
+            return 0  # No baseline exists
+
+        baseline_age = datetime.now() - self.baseline_timestamps[baseline_key]
+        return baseline_age.days
+
+    def refresh_baseline_if_needed(
+        self,
+        dag_id: str,
+        task_id: str,
+        refresh_days: int,
+        airflow_client,
+        successful_logs: List[LogEntry],
+    ) -> bool:
+        """Refresh baseline if it's stale"""
+        if self.is_baseline_stale(dag_id, task_id, refresh_days):
+            logger.info(f"Refreshing stale baseline for {dag_id}.{task_id}")
+            self.build_baseline_clusters(successful_logs, dag_id, task_id)
+            return True
+        return False
 
     def identify_anomalous_patterns(
         self, failed_logs: List[LogEntry], dag_id: str, task_id: str
@@ -154,6 +195,9 @@ class LogClusterer:
                     "baseline_clusters": {
                         k: list(v) for k, v in self.baseline_clusters.items()
                     },
+                    "baseline_timestamps": {
+                        k: v.isoformat() for k, v in self.baseline_timestamps.items()
+                    },
                 }
                 with open(baseline_state_path, "wb") as f:
                     pickle.dump(state, f)
@@ -175,6 +219,11 @@ class LogClusterer:
                     if "baseline_clusters" in state:
                         self.baseline_clusters = {
                             k: set(v) for k, v in state["baseline_clusters"].items()
+                        }
+                    if "baseline_timestamps" in state:
+                        self.baseline_timestamps = {
+                            k: datetime.fromisoformat(v)
+                            for k, v in state["baseline_timestamps"].items()
                         }
                         logger.info("Loaded baseline clusters state from persistence")
                 except Exception as e:

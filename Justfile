@@ -125,8 +125,8 @@ notify-failures since_minutes="60":
 # Notify about recent task failures with real-time baseline analysis
 # Usage: just notify-failures-realtime [since_minutes]
 notify-failures-realtime since_minutes="60":
-    @echo "Checking for failed tasks with real-time baseline analysis..."
-    uv run dagnostics notify-failures --since-minutes {{since_minutes}} --no-use-stored-baseline
+    @echo "Checking for failed tasks with real-time baseline analysis (from config)..."
+    uv run dagnostics notify-failures --since-minutes {{since_minutes}}
     @echo "Notifications sent!"
 
 # Notify about recent task failures with custom LLM provider

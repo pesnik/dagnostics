@@ -28,11 +28,38 @@ class DAGAnalyzer:
         clusterer: LogClusterer,
         filter: ErrorPatternFilter,
         llm: LLMEngine,
+        config=None,
     ):
         self.airflow_client = airflow_client
         self.clusterer = clusterer
         self.filter = filter
         self.llm = llm
+        self.config = config
+
+    def _analyze_task_core(
+        self, dag_id: str, task_id: str, run_id: str, try_number: int
+    ) -> tuple[List[LogEntry], BaselineComparison]:
+        """Core analysis workflow - common logic for both full analysis and SMS extraction"""
+        logger.info(f"Starting core analysis for {dag_id}.{task_id}.{run_id}")
+
+        # Step 1: Ensure baseline exists (stored or real-time)
+        baseline_comparison = self._ensure_baseline(dag_id, task_id)
+
+        # Step 2: Collect failed task logs
+        failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
+
+        if not failed_logs:
+            return [], baseline_comparison
+
+        # Step 3: Identify anomalous patterns using Drain3
+        anomalous_logs = self.clusterer.identify_anomalous_patterns(
+            failed_logs, dag_id, task_id
+        )
+
+        # Step 4: Filter known non-error patterns
+        error_candidates = self.filter.filter_candidates(anomalous_logs)
+
+        return error_candidates, baseline_comparison
 
     def analyze_task_failure(
         self, dag_id: str, task_id: str, run_id: str, try_number: int
@@ -41,31 +68,10 @@ class DAGAnalyzer:
         start_time = datetime.now()
 
         try:
-            logger.info(f"Starting analysis for {dag_id}.{task_id}.{run_id}")
-
-            # Step 1: Ensure baseline exists
-            baseline_comparison = self._ensure_baseline(dag_id, task_id)
-
-            # Step 2: Collect failed task logs
-            failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
-
-            if not failed_logs:
-                return AnalysisResult(
-                    dag_id=dag_id,
-                    task_id=task_id,
-                    run_id=run_id,
-                    success=False,
-                    error_message="No logs found for failed task",
-                    processing_time=(datetime.now() - start_time).total_seconds(),
-                )
-
-            # Step 3: Identify anomalous patterns using Drain3
-            anomalous_logs = self.clusterer.identify_anomalous_patterns(
-                failed_logs, dag_id, task_id
+            # Use core analysis logic
+            error_candidates, baseline_comparison = self._analyze_task_core(
+                dag_id, task_id, run_id, try_number
             )
-
-            # Step 4: Filter known non-error patterns
-            error_candidates = self.filter.filter_candidates(anomalous_logs)
 
             if not error_candidates:
                 return AnalysisResult(
@@ -78,13 +84,13 @@ class DAGAnalyzer:
                         category=ErrorCategory.UNKNOWN,
                         severity=ErrorSeverity.LOW,
                         suggested_actions=["Review logs manually"],
-                        related_logs=failed_logs,
+                        related_logs=[],
                     ),
                     baseline_comparison=baseline_comparison,
                     processing_time=(datetime.now() - start_time).total_seconds(),
                 )
 
-            # Step 5: LLM analysis
+            # Step 5: Full LLM analysis with categorization and resolution
             error_analysis = self.llm.extract_error_message(error_candidates)
 
             # Step 6: Generate resolution suggestions
@@ -119,26 +125,15 @@ class DAGAnalyzer:
     ) -> str:
         """Extract error line for SMS notifications using Drain3 clustering and LLM analysis"""
         try:
-            logger.info(f"Extracting error for SMS: {dag_id}.{task_id}.{run_id}")
-
-            # Collect failed task logs
-            failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
-
-            if not failed_logs:
-                return f"{dag_id}.{task_id}: No logs found"
-
-            # Step 1: Identify anomalous patterns using Drain3
-            anomalous_logs = self.clusterer.identify_anomalous_patterns(
-                failed_logs, dag_id, task_id
+            # Use core analysis logic
+            error_candidates, _ = self._analyze_task_core(
+                dag_id, task_id, run_id, try_number
             )
-
-            # Step 2: Filter known non-error patterns
-            error_candidates = self.filter.filter_candidates(anomalous_logs)
 
             if not error_candidates:
                 return f"{dag_id}.{task_id}: No error patterns identified"
 
-            # Step 3: Use LLM to extract error message from filtered logs
+            # Step 5: Lightweight LLM analysis for SMS
             error_line = self.llm.extract_error_line(error_candidates)
 
             return f"{dag_id}.{task_id}: {error_line}"
@@ -150,22 +145,45 @@ class DAGAnalyzer:
             return f"{dag_id}.{task_id}: Analysis failed - {str(e)}"
 
     def _ensure_baseline(self, dag_id: str, task_id: str) -> BaselineComparison:
-        """Ensure baseline exists for the given dag/task"""
+        """Ensure baseline exists for the given dag/task based on configuration"""
         baseline_key = f"{dag_id}.{task_id}"
 
-        # Check if baseline exists and is recent
-        if baseline_key in self.clusterer.baseline_clusters:
-            # For simplicity, assume baseline is always current
-            # In production, you'd check timestamp and refresh if needed
-            return BaselineComparison(
-                is_known_pattern=False,  # Will be updated during analysis
-                similar_clusters=[],
-                novelty_score=0.0,
-                baseline_age_days=1,  # Placeholder
+        # Check configuration for baseline usage
+        use_stored_baseline = True  # Default to stored
+        refresh_days = 7  # Default refresh days
+        if self.config and hasattr(self.config, "monitoring"):
+            use_stored_baseline = (
+                self.config.monitoring.baseline_usage.value == "stored"
             )
+            refresh_days = self.config.monitoring.baseline_refresh_days
 
-        # Build new baseline
-        logger.info(f"Building baseline for {dag_id}.{task_id}")
+        # Check if baseline exists and is recent (only if using stored baseline)
+        if use_stored_baseline and baseline_key in self.clusterer.baseline_clusters:
+            # Check if baseline is stale and needs refresh
+            if self.clusterer.is_baseline_stale(dag_id, task_id, refresh_days):
+                logger.info(
+                    f"Baseline for {dag_id}.{task_id} is stale ({self.clusterer.get_baseline_age_days(dag_id, task_id)} days old), refreshing..."
+                )
+                # Fall through to build new baseline
+            else:
+                # Baseline is current, use it
+                baseline_age_days = self.clusterer.get_baseline_age_days(
+                    dag_id, task_id
+                )
+                logger.debug(
+                    f"Using existing baseline for {dag_id}.{task_id} (age: {baseline_age_days} days)"
+                )
+                return BaselineComparison(
+                    is_known_pattern=False,  # Will be updated during analysis
+                    similar_clusters=[],
+                    novelty_score=0.0,
+                    baseline_age_days=baseline_age_days,
+                )
+
+        # Build new baseline (either real-time, stale stored, or because stored doesn't exist)
+        baseline_type = "real-time" if not use_stored_baseline else "stored"
+        logger.info(f"Building {baseline_type} baseline for {dag_id}.{task_id}")
+
         successful_tasks = self.airflow_client.get_successful_tasks(
             dag_id, task_id, limit=3
         )
@@ -197,11 +215,12 @@ class DAGAnalyzer:
         if baseline_logs:
             self.clusterer.build_baseline_clusters(baseline_logs, dag_id, task_id)
 
+        baseline_age_days = self.clusterer.get_baseline_age_days(dag_id, task_id)
         return BaselineComparison(
             is_known_pattern=False,
             similar_clusters=[],
             novelty_score=0.5,
-            baseline_age_days=0,
+            baseline_age_days=baseline_age_days,
         )
 
     def _collect_failed_logs(

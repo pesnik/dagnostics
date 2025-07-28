@@ -148,7 +148,7 @@ def analyze(
         llm = LLMEngine(llm_provider_instance)
 
         # Create analyzer and run analysis
-        analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm)
+        analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm, config)
         result = analyzer.analyze_task_failure(dag_id, task_id, run_id, try_number)
 
         # Output results
@@ -234,9 +234,6 @@ def notify_failures(
         "-l",
         help="LLM provider to use (ollama, openai, anthropic, gemini)",
     ),
-    use_stored_baseline: bool = Option(
-        True, "--use-stored-baseline", help="Use stored baseline state (vs on-the-fly)"
-    ),
 ):
     """
     Analyze recent Airflow task failures and send concise SMS notifications.
@@ -264,13 +261,8 @@ def notify_failures(
         verify_ssl=False,
     )
 
-    # Configure baseline usage
-    if use_stored_baseline:
-        clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
-    else:
-        # On-the-fly baseline: don't use persistence
-        clusterer = LogClusterer(persistence_path=None)
-
+    # Use config-based baseline configuration
+    clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
     filter = ErrorPatternFilter()
 
     # LLM provider selection (reuse logic from analyze)
@@ -317,7 +309,7 @@ def notify_failures(
         typer.echo("Error: No LLM provider could be initialized.", err=True)
         raise typer.Exit(code=1)
     llm = LLMEngine(llm_provider_instance)
-    analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm)
+    analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm, config)
 
     # Validate SMS configuration
     if not config.alerts.sms.enabled:
