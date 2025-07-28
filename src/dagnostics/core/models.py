@@ -174,9 +174,20 @@ class PatternFilteringConfig(BaseModel):
 class SMSAlertConfig(BaseModel):
     enabled: bool
     provider: str
+    # Twilio-specific fields
     account_sid: str = ""
     auth_token: str = ""
     from_number: str = ""
+    # Custom gateway fields
+    base_url: str = ""
+    path: str = ""
+    static_params: Dict[str, str] = Field(default_factory=dict)
+    param_mapping: Dict[str, str] = Field(default_factory=dict)
+    # Recipient configuration
+    default_recipients: List[str] = Field(default_factory=list)
+    task_recipients: Dict[str, List[str]] = Field(
+        default_factory=dict
+    )  # task_pattern -> phone_numbers
 
 
 class EmailAlertConfig(BaseModel):

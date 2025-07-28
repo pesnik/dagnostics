@@ -7,6 +7,7 @@ import yaml
 from typer import Argument, Option
 
 from dagnostics.core.models import AnalysisResult, AppConfig, OllamaLLMConfig
+from dagnostics.utils.sms import send_sms_alert
 
 
 class OutputFormat(str, Enum):
@@ -220,3 +221,146 @@ def report(
         typer.echo(f"Report saved to: {output}")
     else:
         typer.echo("Report generated successfully!")
+
+
+def notify_failures(
+    since_minutes: int = Option(
+        60, "--since-minutes", "-s", help="Look back window in minutes"
+    ),
+    dry_run: bool = Option(False, "--dry-run", help="Don't actually send SMS"),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
+):
+    """
+    Analyze recent Airflow task failures and send concise SMS notifications.
+    """
+    from dagnostics.core.config import load_config
+    from dagnostics.core.models import GeminiLLMConfig, OllamaLLMConfig, OpenAILLMConfig
+    from dagnostics.llm.engine import (
+        GeminiProvider,
+        LLMEngine,
+        LLMProvider,
+        OllamaProvider,
+        OpenAIProvider,
+    )
+    from dagnostics.llm.log_clusterer import LogClusterer
+    from dagnostics.llm.pattern_filter import ErrorPatternFilter
+    from dagnostics.monitoring.airflow_client import AirflowClient
+    from dagnostics.monitoring.analyzer import DAGAnalyzer
+
+    config = load_config()
+    airflow_client = AirflowClient(
+        base_url=config.airflow.base_url,
+        username=config.airflow.username,
+        password=config.airflow.password,
+        db_connection=config.airflow.database_url,
+        verify_ssl=False,
+    )
+    clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+    filter = ErrorPatternFilter()
+
+    # LLM provider selection (reuse logic from analyze)
+    llm_provider_instance: Union[
+        OllamaProvider, OpenAIProvider, GeminiProvider, LLMProvider, None
+    ] = None
+    if llm_provider == "ollama":
+        ollama_config = config.llm.providers.get("ollama")
+        if not ollama_config or not isinstance(ollama_config, OllamaLLMConfig):
+            typer.echo(
+                "Error: Ollama LLM configuration not found or invalid.", err=True
+            )
+            raise typer.Exit(code=1)
+        llm_provider_instance = OllamaProvider(
+            base_url=ollama_config.base_url or "http://localhost:11434",
+            model=ollama_config.model,
+        )
+    elif llm_provider == "openai":
+        openai_config = config.llm.providers.get("openai")
+        if not openai_config or not isinstance(openai_config, OpenAILLMConfig):
+            typer.echo(
+                "Error: OpenAI LLM configuration not found or invalid.", err=True
+            )
+            raise typer.Exit(code=1)
+        llm_provider_instance = OpenAIProvider(
+            api_key=openai_config.api_key,
+            model=openai_config.model,
+        )
+    elif llm_provider == "gemini":
+        gemini_config = config.llm.providers.get("gemini")
+        if not gemini_config or not isinstance(gemini_config, GeminiLLMConfig):
+            typer.echo(
+                "Error: Gemini LLM configuration not found or invalid.", err=True
+            )
+            raise typer.Exit(code=1)
+        llm_provider_instance = GeminiProvider(
+            api_key=gemini_config.api_key,
+            model=gemini_config.model,
+        )
+    else:
+        typer.echo(f"Error: Unknown LLM provider '{llm_provider}'", err=True)
+        raise typer.Exit(code=1)
+    if llm_provider_instance is None:
+        typer.echo("Error: No LLM provider could be initialized.", err=True)
+        raise typer.Exit(code=1)
+    llm = LLMEngine(llm_provider_instance)
+    analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm)
+
+    # Validate SMS configuration
+    if not config.alerts.sms.enabled:
+        typer.echo("Error: SMS alerts are not enabled in configuration.", err=True)
+        raise typer.Exit(code=1)
+
+    if (
+        not config.alerts.sms.default_recipients
+        and not config.alerts.sms.task_recipients
+    ):
+        typer.echo(
+            "Error: No SMS recipients configured. Please add default_recipients or task_recipients to your config.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    typer.echo(f"🔍 Fetching failed tasks from last {since_minutes} minutes...")
+    failed_tasks = airflow_client.get_failed_tasks(since_minutes)
+    if not failed_tasks:
+        typer.echo("No failed tasks found.")
+        return
+    typer.echo(f"Found {len(failed_tasks)} failed tasks.")
+
+    # Config-driven recipient mapping
+    def get_recipients_for_task(task):
+        import re
+
+        task_key = f"{task.dag_id}.{task.task_id}"
+
+        # Check task-specific recipients first
+        for pattern, recipients in config.alerts.sms.task_recipients.items():
+            if re.match(pattern, task_key):
+                return recipients
+
+        # Fall back to default recipients
+        return config.alerts.sms.default_recipients
+
+    for task in failed_tasks:
+        try:
+            result = analyzer.analyze_task_failure(
+                task.dag_id, task.task_id, task.run_id, task.try_number
+            )
+            # Extract a concise error summary (customize as needed)
+            if result.analysis and result.analysis.error_message:
+                summary = f"{task.dag_id}.{task.task_id} failed: {result.analysis.error_message}"
+            else:
+                summary = f"{task.dag_id}.{task.task_id} failed."
+            recipients = get_recipients_for_task(task)
+            if dry_run:
+                typer.echo(f"[DRY RUN] Would send to {recipients}: {summary}")
+            else:
+                sms_config = config.alerts.sms.dict()
+                send_sms_alert(summary, recipients, sms_config)
+                typer.echo(f"Sent to {recipients}: {summary}")
+        except Exception as e:
+            typer.echo(f"Error processing {task.dag_id}.{task.task_id}: {e}", err=True)

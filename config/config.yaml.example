@@ -56,10 +56,27 @@ pattern_filtering:
 alerts:
   sms:
     enabled: true
-    provider: "twilio"
-    account_sid: "${TWILIO_ACCOUNT_SID}"
-    auth_token: "${TWILIO_AUTH_TOKEN}"
-    from_number: "${TWILIO_FROM_NUMBER}"
+    provider: "custom"
+    base_url: "https://your-sms-gateway.com"
+    path: "send"
+    static_params:
+      api_key: "${SMS_GATEWAY_API_KEY}"
+    param_mapping:
+      recipient: "to"
+      message: "msg"
+    # Recipient configuration
+    default_recipients:
+      - "+1234567890"  # Default phone number for all tasks
+      - "+0987654321"  # Additional default recipient
+    # Task-specific recipients (optional)
+    task_recipients:
+      "etl_pipeline.*":  # All tasks in etl_pipeline DAGs
+        - "+1111111111"
+        - "+2222222222"
+      ".*critical.*":    # Any task with "critical" in the name
+        - "+3333333333"
+      "data_ingestion.*":
+        - "+4444444444"
   email:
     enabled: true
     smtp_server: "smtp.gmail.com"
