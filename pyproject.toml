@@ -25,6 +25,8 @@ dependencies = [
     "types-requests>=2.32.4.20250611",
     "dynaconf>=3.2.11",
     "psycopg2-binary>=2.9.10",
+    "anthropic>=0.59.0",
+    "google-generativeai>=0.8.5",
 ]
 
 [project.optional-dependencies]

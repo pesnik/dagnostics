@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import List, Union
+from typing import List, Optional, Union
 
 import requests
 from pydantic import HttpUrl
@@ -68,6 +68,149 @@ class OpenAIProvider(LLMProvider):
             raise
 
 
+class GeminiProvider(LLMProvider):
+    """Google Gemini LLM provider"""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gemini-2.5-flash-lite",
+        max_output_tokens: Optional[int] = None,
+        top_p: Optional[int] = None,
+        top_k: Optional[int] = None,
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.max_output_tokens = max_output_tokens
+        self.top_p = top_p
+        self.top_k = top_k
+        self._configure_gemini()
+
+    def _configure_gemini(self):
+        """Configure Gemini API"""
+        try:
+            import google.generativeai as genai
+
+            genai.configure(api_key=self.api_key)  # type: ignore
+
+            generation_config = {}
+            if self.max_output_tokens is not None:
+                generation_config["max_output_tokens"] = self.max_output_tokens
+            if self.top_p is not None:
+                generation_config["top_p"] = self.top_p
+            if self.top_k is not None:
+                generation_config["top_k"] = self.top_k
+
+            self.gemini_model = genai.GenerativeModel(  # type: ignore
+                self.model,
+                generation_config=generation_config if generation_config else None,  # type: ignore
+            )
+
+        except (ImportError, AttributeError):
+            logger.error(
+                "google.generativeai package not installed. Install with: pip install google-generativeai"
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Failed to configure Gemini: {e}")
+            raise
+
+    def generate_response(self, prompt: str, **kwargs) -> str:
+        try:
+            # Extract generation config parameters, with method-level overrides
+            generation_config = {}
+
+            # Use instance defaults first, then override with kwargs
+            if self.max_output_tokens is not None:
+                generation_config["max_output_tokens"] = self.max_output_tokens
+            if self.top_p is not None:
+                generation_config["top_p"] = self.top_p
+            if self.top_k is not None:
+                generation_config["top_k"] = self.top_k
+
+            # Override with method-level parameters
+            if "temperature" in kwargs:
+                generation_config["temperature"] = kwargs.pop("temperature")
+            if "max_output_tokens" in kwargs:
+                generation_config["max_output_tokens"] = kwargs.pop("max_output_tokens")
+            if "top_p" in kwargs:
+                generation_config["top_p"] = kwargs.pop("top_p")
+            if "top_k" in kwargs:
+                generation_config["top_k"] = kwargs.pop("top_k")
+
+            # Create a new model instance if we need to override the generation config
+            if generation_config and any(
+                key in kwargs
+                for key in ["temperature", "max_output_tokens", "top_p", "top_k"]
+            ):
+                import google.generativeai as genai
+
+                temp_model = genai.GenerativeModel(  # type: ignore
+                    self.model, generation_config=generation_config  # type: ignore
+                )
+                response = temp_model.generate_content(prompt)
+            else:
+                # Use the pre-configured model
+                response = self.gemini_model.generate_content(prompt)
+
+            # Handle potential response issues
+            if not response.text:
+                logger.warning("Gemini returned empty response")
+                return ""
+
+            return response.text
+
+        except Exception as e:
+            # More specific error handling for common Gemini issues
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "rate limit" in error_msg:
+                logger.error(f"Gemini quota/rate limit exceeded: {e}")
+            elif "safety" in error_msg or "blocked" in error_msg:
+                logger.error(f"Gemini content blocked by safety filters: {e}")
+            elif "api key" in error_msg:
+                logger.error(f"Gemini API key issue: {e}")
+            else:
+                logger.error(f"Gemini request failed: {e}")
+            raise
+
+
+class AnthropicProvider(LLMProvider):
+    """Anthropic Claude LLM provider"""
+
+    def __init__(self, api_key: str, model: str = "claude-3-sonnet-20240229"):
+        self.api_key = api_key
+        self.model = model
+
+    def generate_response(self, prompt: str, **kwargs) -> str:
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=self.api_key)
+
+            # Extract anthropic-specific parameters
+            max_tokens = kwargs.pop("max_tokens", 1000)
+            temperature = kwargs.pop("temperature", 0.1)
+
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            )
+
+            return response.content[0].text
+
+        except ImportError:
+            logger.error(
+                "anthropic package not installed. Install with: pip install anthropic"
+            )
+            raise
+        except Exception as e:
+            logger.error(f"Anthropic request failed: {e}")
+            raise
+
+
 class LLMEngine:
     """Provider-agnostic LLM interface for error analysis"""
 
@@ -94,7 +237,18 @@ class LLMEngine:
         )
 
         try:
-            response = self.provider.generate_response(prompt, temperature=0.1)
+            # Use provider-specific parameters for better results
+            kwargs = {"temperature": 0.1}
+            if isinstance(self.provider, GeminiProvider):
+                # Gemini-specific optimizations for structured output
+                kwargs.update({"temperature": 0.1, "top_p": 0.8, "top_k": 40})
+            elif isinstance(self.provider, OpenAIProvider):
+                # OpenAI-specific optimizations
+                kwargs.update({"temperature": 0.1})
+                if "gpt-3.5" not in self.provider.model.lower():
+                    kwargs["response_format"] = {"type": "json_object"}  # type: ignore
+
+            response = self.provider.generate_response(prompt, **kwargs)
             return self._parse_error_analysis_response(response, log_entries)
         except Exception as e:
             logger.error(f"Error extraction failed: {e}")
@@ -131,9 +285,12 @@ Resolution Steps:
 """
 
         try:
-            response = self.provider.generate_response(
-                resolution_prompt, temperature=0.2
-            )
+            # Use slightly higher temperature for more creative resolution suggestions
+            kwargs = {"temperature": 0.2}
+            if isinstance(self.provider, GeminiProvider):
+                kwargs.update({"temperature": 0.3, "top_p": 0.9})
+
+            response = self.provider.generate_response(resolution_prompt, **kwargs)
             return self._parse_resolution_steps(response)
         except Exception as e:
             logger.error(f"Resolution suggestion failed: {e}")
@@ -144,7 +301,8 @@ Resolution Steps:
             ]
 
     def _load_error_extraction_prompt(self) -> str:
-        return """
+        # Enhanced prompt with better instructions for different LLM providers
+        base_prompt = """
 You are an expert ETL engineer analyzing Airflow task failure logs. Your job is to identify the root cause error from noisy log data.
 
 Log Context:
@@ -168,8 +326,16 @@ Respond in JSON format:
     "severity": "low|medium|high|critical",
     "reasoning": "Brief explanation of why this is the root cause",
     "error_lines": ["specific log lines that contain the error"]
-}}
-"""
+}}"""
+
+        # Add provider-specific instructions
+        if isinstance(self.provider, GeminiProvider):
+            return (
+                base_prompt
+                + "\n\nIMPORTANT: Respond with valid JSON only. Do not include any markdown formatting or code blocks."
+            )
+
+        return base_prompt
 
     def _load_categorization_prompt(self) -> str:
         return """
@@ -195,7 +361,17 @@ Respond with just the category name (e.g., "resource_error").
     ) -> ErrorAnalysis:
         """Parse LLM response into ErrorAnalysis object"""
         try:
-            data = json.loads(response.strip())
+            # Clean response for better JSON parsing (especially for Gemini)
+            cleaned_response = response.strip()
+
+            # Remove markdown code blocks if present
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+            cleaned_response = cleaned_response.strip()
+
+            data = json.loads(cleaned_response)
 
             return ErrorAnalysis(
                 error_message=data.get("error_message", "Unknown error"),
@@ -209,11 +385,18 @@ Respond with just the category name (e.g., "resource_error").
             )
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.error(f"Failed to parse LLM response: {e}")
+            logger.debug(f"Raw response: {response}")
             return self._create_fallback_analysis(log_entries, f"Parse error: {e}")
 
     def _parse_category_response(self, response: str) -> ErrorCategory:
         """Parse category from LLM response"""
         category_str = response.strip().lower()
+
+        # Handle potential markdown or extra formatting
+        category_str = re.sub(r"^```.*\n", "", category_str)
+        category_str = re.sub(r"\n```$", "", category_str)
+        category_str = category_str.strip()
+
         try:
             return ErrorCategory(category_str)
         except ValueError:

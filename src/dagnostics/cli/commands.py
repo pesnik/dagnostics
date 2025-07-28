@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union  # Import Union
 
 import typer
 import yaml
@@ -29,11 +29,24 @@ def analyze(
         OutputFormat.json, "--format", "-f", help="Output format"
     ),
     verbose: bool = Option(False, "--verbose", "-v", help="Verbose output"),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
 ):
     """Analyze a specific task failure."""
     # Local imports are fine within a command function if they are only used there
     from dagnostics.core.config import load_config
-    from dagnostics.llm.engine import LLMEngine, OllamaProvider
+    from dagnostics.core.models import GeminiLLMConfig, OpenAILLMConfig
+    from dagnostics.llm.engine import LLMProvider  # Import the base LLMProvider type
+    from dagnostics.llm.engine import (
+        GeminiProvider,
+        LLMEngine,
+        OllamaProvider,
+        OpenAIProvider,
+    )
     from dagnostics.llm.log_clusterer import LogClusterer
     from dagnostics.llm.pattern_filter import ErrorPatternFilter
     from dagnostics.monitoring.airflow_client import AirflowClient
@@ -51,33 +64,86 @@ def analyze(
             db_connection=config.airflow.database_url,
             verify_ssl=False,
         )
-
         clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
-
         filter = ErrorPatternFilter()
 
-        ollama_config = config.llm.providers.get("ollama")
-        if not ollama_config:
-            typer.echo("Error: Ollama LLM configuration not found.", err=True)
-            raise typer.Exit(code=1)
+        # Initialize LLM provider based on selection
+        # Define llm_provider_instance with a Union of all possible provider types and None
+        llm_provider_instance: Union[
+            OllamaProvider, OpenAIProvider, GeminiProvider, LLMProvider, None
+        ] = None
 
-        # Ensure ollama_config is of the correct type
-        if not isinstance(ollama_config, OllamaLLMConfig):
-            typer.echo(
-                "Error: Ollama LLM configuration is not of type OllamaLLMConfig.",
-                err=True,
+        if llm_provider == "ollama":
+            ollama_config = config.llm.providers.get("ollama")
+            if not ollama_config:
+                typer.echo("Error: Ollama LLM configuration not found.", err=True)
+                raise typer.Exit(code=1)
+
+            # Ensure ollama_config is of the correct type
+            if not isinstance(ollama_config, OllamaLLMConfig):
+                typer.echo(
+                    "Error: Ollama LLM configuration is not of type OllamaLLMConfig.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+
+            llm_provider_instance = OllamaProvider(
+                base_url=(
+                    ollama_config.base_url
+                    if ollama_config.base_url
+                    else "http://localhost:11434"
+                ),
+                model=ollama_config.model,
             )
+
+        elif llm_provider == "openai":
+            openai_config = config.llm.providers.get("openai")
+            if not openai_config:
+                typer.echo("Error: OpenAI LLM configuration not found.", err=True)
+                raise typer.Exit(code=1)
+
+            # Ensure openai_config is of the correct type
+            if not isinstance(openai_config, OpenAILLMConfig):
+                typer.echo(
+                    "Error: OpenAI LLM configuration is not of type OpenAILLMConfig.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+
+            llm_provider_instance = OpenAIProvider(
+                api_key=openai_config.api_key,
+                model=openai_config.model,
+            )
+
+        elif llm_provider == "gemini":
+            gemini_config = config.llm.providers.get("gemini")
+            if not gemini_config:
+                typer.echo("Error: Gemini LLM configuration not found.", err=True)
+                raise typer.Exit(code=1)
+
+            # Ensure gemini_config is of the correct type
+            if not isinstance(gemini_config, GeminiLLMConfig):
+                typer.echo(
+                    "Error: Gemini LLM configuration is not of type GeminiLLMConfig.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
+
+            llm_provider_instance = GeminiProvider(
+                api_key=gemini_config.api_key,
+                model=gemini_config.model,
+            )
+        else:
+            typer.echo(f"Error: Unknown LLM provider '{llm_provider}'", err=True)
             raise typer.Exit(code=1)
 
-        llm_provider = OllamaProvider(
-            base_url=(
-                ollama_config.base_url
-                if ollama_config.base_url
-                else "http://localhost:14231"
-            ),
-            model=ollama_config.model,
-        )
-        llm = LLMEngine(llm_provider)
+        # Check if llm_provider_instance is still None before passing to LLMEngine
+        if llm_provider_instance is None:
+            typer.echo("Error: No LLM provider could be initialized.", err=True)
+            raise typer.Exit(code=1)
+
+        # Now llm_provider_instance is guaranteed to be one of the LLMProvider types
+        llm = LLMEngine(llm_provider_instance)
 
         # Create analyzer and run analysis
         analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm)

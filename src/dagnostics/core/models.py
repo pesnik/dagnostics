@@ -135,10 +135,21 @@ class AnthropicLLMConfig(BaseModel):
     base_url: Optional[HttpUrl] = None
 
 
+class GeminiLLMConfig(BaseModel):
+    api_key: str = Field(..., min_length=1)
+    model: str
+    temperature: float = Field(..., ge=0.0, le=1.0)
+    max_output_tokens: Optional[int] = Field(None, ge=1)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    top_k: Optional[int] = Field(None, ge=1)
+
+
 class LLMConfig(BaseModel):
     default_provider: str
-
-    providers: Dict[str, Union[OllamaLLMConfig, OpenAILLMConfig, AnthropicLLMConfig]]
+    providers: Dict[
+        str,
+        Union[OllamaLLMConfig, OpenAILLMConfig, AnthropicLLMConfig, GeminiLLMConfig],
+    ]
 
 
 class MonitoringConfig(BaseModel):
