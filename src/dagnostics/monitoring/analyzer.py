@@ -133,7 +133,6 @@ class DAGAnalyzer:
             if not error_candidates:
                 return f"{dag_id}.{task_id}: No error patterns identified"
 
-            # Step 5: Lightweight LLM analysis for SMS
             error_line = self.llm.extract_error_line(error_candidates)
 
             return f"{dag_id}.{task_id}: {error_line}"
