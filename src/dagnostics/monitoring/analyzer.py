@@ -114,12 +114,12 @@ class DAGAnalyzer:
                 processing_time=(datetime.now() - start_time).total_seconds(),
             )
 
-    def extract_task_error(
+    def extract_task_error_for_sms(
         self, dag_id: str, task_id: str, run_id: str, try_number: int
     ) -> str:
-        """Extract error line for SMS notifications (lightweight, no LLM analysis)"""
+        """Extract error line for SMS notifications using LLM analysis"""
         try:
-            logger.info(f"Extracting error for {dag_id}.{task_id}.{run_id}")
+            logger.info(f"Extracting error for SMS: {dag_id}.{task_id}.{run_id}")
 
             # Collect failed task logs
             failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
@@ -127,7 +127,7 @@ class DAGAnalyzer:
             if not failed_logs:
                 return f"{dag_id}.{task_id}: No logs found"
 
-            # Use simple error extraction (no LLM, no categorization, no resolution)
+            # Use LLM-based error extraction for SMS notifications
             error_line = self.llm.extract_error_line(failed_logs)
 
             return f"{dag_id}.{task_id}: {error_line}"

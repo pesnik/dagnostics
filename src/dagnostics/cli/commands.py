@@ -357,8 +357,8 @@ def notify_failures(
 
     for task in failed_tasks:
         try:
-            # Use lightweight error extraction for SMS notifications (no LLM analysis)
-            summary = analyzer.extract_task_error(
+            # Use LLM-based error extraction for SMS notifications
+            summary = analyzer.extract_task_error_for_sms(
                 task.dag_id, task.task_id, task.run_id, task.try_number
             )
             recipients = get_recipients_for_task(task)

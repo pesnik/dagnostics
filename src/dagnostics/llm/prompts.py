@@ -73,9 +73,9 @@ Focus on root cause resolution, not just symptoms.
 Resolution Steps:
 """
 
-# Simple error extraction prompt for SMS notifications (if needed in future)
-SIMPLE_ERROR_EXTRACTION_PROMPT = """
-Extract the most important error message from these Airflow task logs.
+# SMS error extraction prompt (lightweight LLM analysis for notifications)
+SMS_ERROR_EXTRACTION_PROMPT = """
+Extract the most important error message from these Airflow task logs for SMS notification.
 
 Log Context:
 {log_context}
@@ -86,8 +86,9 @@ Task ID: {task_id}
 Instructions:
 1. Find the PRIMARY error that caused the task failure
 2. Return ONLY the exact error message
-3. Keep it concise and actionable
+3. Keep it concise and actionable (max 160 chars for SMS)
 4. Ignore informational and debug messages
+5. Focus on the root cause, not symptoms
 
 Return just the error message, nothing else.
 """
@@ -97,7 +98,7 @@ PROMPT_TEMPLATES = {
     "error_extraction": ERROR_EXTRACTION_PROMPT,
     "error_categorization": ERROR_CATEGORIZATION_PROMPT,
     "resolution_suggestion": RESOLUTION_SUGGESTION_PROMPT,
-    "simple_error_extraction": SIMPLE_ERROR_EXTRACTION_PROMPT,
+    "sms_error_extraction": SMS_ERROR_EXTRACTION_PROMPT,
 }
 
 # Provider-specific prompt modifications
@@ -164,10 +165,13 @@ def get_resolution_prompt(error_message: str, category: str, severity: str) -> s
     )
 
 
-def get_simple_error_prompt(log_context: str, dag_id: str, task_id: str) -> str:
-    """Get the simple error extraction prompt for SMS notifications."""
+def get_sms_error_prompt(
+    log_context: str, dag_id: str, task_id: str, provider_type: Optional[str] = None
+) -> str:
+    """Get the SMS error extraction prompt for lightweight LLM analysis."""
     return get_prompt(
-        "simple_error_extraction",
+        "sms_error_extraction",
+        provider_type=provider_type,
         log_context=log_context,
         dag_id=dag_id,
         task_id=task_id,

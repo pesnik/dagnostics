@@ -12,6 +12,7 @@ from dagnostics.llm.prompts import (
     get_categorization_prompt,
     get_error_extraction_prompt,
     get_resolution_prompt,
+    get_sms_error_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -270,8 +271,71 @@ class LLMEngine:
             return self._create_fallback_analysis(log_entries, str(e))
 
     def extract_error_line(self, log_entries: List[LogEntry]) -> str:
-        """Extract the exact error line for SMS notifications (lightweight)"""
+        """Extract the exact error line for SMS notifications using LLM analysis"""
 
+        if not log_entries:
+            return "No error details available"
+
+        # Prepare log context (last 10 entries for SMS)
+        log_context = "\n".join(
+            [
+                f"[{entry.timestamp}] {entry.level}: {entry.message}"
+                for entry in log_entries[-10:]  # Last 10 entries for context
+            ]
+        )
+
+        # Determine provider type for prompt customization
+        provider_type = None
+        if isinstance(self.provider, GeminiProvider):
+            provider_type = "gemini"
+        elif isinstance(self.provider, OpenAIProvider):
+            provider_type = "openai"
+        elif isinstance(self.provider, AnthropicProvider):
+            provider_type = "anthropic"
+        elif isinstance(self.provider, OllamaProvider):
+            provider_type = "ollama"
+
+        # Get SMS-specific prompt
+        prompt = get_sms_error_prompt(
+            log_context=log_context,
+            dag_id=log_entries[0].dag_id if log_entries else "unknown",
+            task_id=log_entries[0].task_id if log_entries else "unknown",
+            provider_type=provider_type,
+        )
+
+        try:
+            # Use lower temperature for more consistent SMS error extraction
+            kwargs = {"temperature": 0.0}
+            if isinstance(self.provider, GeminiProvider):
+                kwargs.update({"temperature": 0.0, "top_p": 0.8, "top_k": 40})
+            elif isinstance(self.provider, OpenAIProvider):
+                kwargs.update({"temperature": 0.0})
+
+            response = self.provider.generate_response(prompt, **kwargs)
+
+            # Clean and validate response
+            error_message = response.strip()
+            if not error_message or error_message.lower() in [
+                "no error",
+                "none",
+                "unknown",
+            ]:
+                # Fallback to heuristic if LLM returns empty/unknown
+                return self._extract_error_heuristic(log_entries)
+
+            # Truncate if too long for SMS (160 chars)
+            if len(error_message) > 160:
+                error_message = error_message[:157] + "..."
+
+            return error_message
+
+        except Exception as e:
+            logger.error(f"SMS error extraction failed: {e}")
+            # Fallback to heuristic method
+            return self._extract_error_heuristic(log_entries)
+
+    def _extract_error_heuristic(self, log_entries: List[LogEntry]) -> str:
+        """Fallback heuristic error extraction when LLM fails"""
         # Simple heuristic: find the first ERROR/CRITICAL/FATAL level log
         for entry in log_entries:
             if entry.level.upper() in ["ERROR", "CRITICAL", "FATAL"]:
