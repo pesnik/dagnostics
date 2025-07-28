@@ -1,8 +1,7 @@
 import typer
 
+from dagnostics.cli.commands import analyze, report, start
 from dagnostics.utils.logger import setup_logging
-
-from .commands import analyze, report, start
 
 setup_logging()
 
