@@ -109,6 +109,10 @@ class AirflowConfig(BaseModel):
     database_url: str
     verify_ssl: bool = True
     timeout: int = Field(..., ge=1)
+    db_timezone_offset: str = Field(
+        default="+00:00",
+        description="Database timezone offset (e.g., '+06:00', '-05:00')",
+    )
 
 
 class Drain3Config(BaseModel):

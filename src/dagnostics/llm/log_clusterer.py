@@ -156,7 +156,7 @@ class LogClusterer:
             #     for baseline_template in baseline_templates
             # )
 
-            if not is_baseline_pattern:
+            if is_baseline_pattern:
                 anomalous_logs.append(log_entry)
 
         logger.info(

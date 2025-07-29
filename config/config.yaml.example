@@ -5,6 +5,7 @@ airflow:
   database_url: "${AIRFLOW_DB_URL}"
   verify_ssl: false
   timeout: 30
+  db_timezone_offset: "+06:00"
 
 drain3:
   depth: 4

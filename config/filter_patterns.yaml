@@ -1,59 +1,221 @@
-filter_patterns:
-  # Timestamp and separator patterns
-  - '^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}'
-  - '^={3,}|^-{3,}|\*{3,}'
+filter_rules:
+  # Basic log level filters (regex-based for flexibility)
+  - pattern: ".*\\b(INFO|info)\\b.*"
+    type: "regex"
+    description: "Info level logs"
+    case_sensitive: false
 
-  # Airflow specific patterns
-  - '.*Marking task as SUCCESS.*'
-  - '.*Task exited with return code 0.*'
-  - '.*Dependencies all met for.*'
-  - '.*Starting attempt \d+ of \d+.*'
-  - '.*Executing.*in executor.*'
-  - '.*Job.*completed successfully.*'
+  - pattern: ".*\\b(DEBUG|debug)\\b.*"
+    type: "regex"
+    description: "Debug level logs"
 
-  # Python/System patterns
-  - '.*site-packages.*'
-  - '.*UserWarning.*'
-  - '.*DeprecationWarning.*'
-  - '.*FutureWarning.*'
-  - '.*INFO.*pandas.*'
-  - '.*DEBUG.*urllib3.*'
+  - pattern: ".*\\b(TRACE|trace)\\b.*"
+    type: "regex"
+    description: "Trace level logs"
 
-  # Database connection patterns (non-error)
-  - '.*Establishing connection.*'
-  - '.*Connection pool created.*'
-  - '.*Database connection successful.*'
+  # Startup and completion messages
+  - pattern: ".*\\b(Starting|starting|started)\\b.*"
+    type: "regex"
+    description: "Startup messages"
 
-  # Generic informational patterns
-  - '.*Starting.*process.*'
-  - '.*Finished.*process.*'
-  - '.*Loading.*configuration.*'
-  - '.*Initializing.*'
+  - pattern: ".*\\b(Finished|finished|completed|done)\\b.*"
+    type: "regex"
+    description: "Completion messages"
 
-error_indicators:
-  critical:
-    - "fatal"
-    - "critical"
-    - "panic"
-    - "abort"
+  # Timestamp-only lines and separators
+  - pattern: "^\\s*\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}.*$"
+    type: "regex"
+    description: "Timestamp-only lines"
 
-  high:
+  - pattern: "^\\s*={3,}\\s*$"
+    type: "regex"
+    description: "Separator lines with equals"
+
+  - pattern: "^\\s*-{3,}\\s*$"
+    type: "regex"
+    description: "Separator lines with dashes"
+
+  # Airflow-specific filters (using substring for better performance)
+  - pattern: "Marking task as SUCCESS"
+    type: "substring"
+    description: "Airflow success messages"
+
+  - pattern: "Task exited with return code 0"
+    type: "substring"
+    description: "Successful task completion"
+
+  - pattern: "Dependencies all met for"
+    type: "substring"
+    description: "Airflow dependency checks"
+
+  - pattern: "Airflow task starting"
+    type: "substring"
+    description: "Airflow task initialization"
+
+  - pattern: "Job completed successfully"
+    type: "substring"
+    description: "Job success messages"
+
+  # Warning types that are usually not critical
+  - pattern: "UserWarning"
+    type: "substring"
+    description: "Non-critical user warnings"
+
+  - pattern: "DeprecationWarning"
+    type: "substring"
+    description: "Deprecation warnings"
+
+  - pattern: "PendingDeprecationWarning"
+    type: "substring"
+    description: "Pending deprecation warnings"
+
+  - pattern: "FutureWarning"
+    type: "substring"
+    description: "Future compatibility warnings"
+
+  # TPT (Teradata Parallel Transporter) specific filters - from your original list
+  - pattern: "YAHOOOOOOOOOOOOOOOOOOOOOOO"
+    type: "substring"
+    description: "TPT celebration message"
+
+  - pattern: "Task failed with exception"
+    type: "substring"
+    description: "TPT generic failure message - often not the real error"
+
+  - pattern: "Running TPT command:"
+    type: "starts_with"
+    description: "TPT command execution"
+
+  - pattern: "Teradata Parallel Transporter Version"
+    type: "substring"
+    description: "TPT version information"
+
+  - pattern: "Total processor time used"
+    type: "substring"
+    description: "TPT performance stats"
+
+  - pattern: "sending SQL requests"
+    type: "substring"
+    description: "TPT SQL activity"
+
+  - pattern: "Elapsed time"
+    type: "substring"
+    description: "TPT timing information"
+
+  - pattern: "(status 12)"
+    type: "substring"
+    description: "TPT status codes"
+
+  - pattern: "private log not specified"
+    type: "substring"
+    description: "TPT configuration message"
+
+  - pattern: "TPT Exit code set to"
+    type: "substring"
+    description: "TPT exit status"
+
+  - pattern: "Running: "
+    type: "starts_with"
+    description: "Command execution messages"
+
+  - pattern: "no error details were provided."
+    type: "substring"
+    description: "TPT generic error message"
+
+  - pattern: "Details of the failure can be found"
+    type: "substring"
+    description: "TPT error reference message"
+
+  # Database and connection success messages
+  - pattern: "Connection established"
+    type: "substring"
+    description: "Database connection success"
+
+  - pattern: "Connected to"
+    type: "starts_with"
+    description: "Connection success messages"
+
+  - pattern: "Login successful"
+    type: "substring"
+    description: "Authentication success"
+
+  # Length-based filters
+  - pattern: "10"
+    type: "length_threshold"
+    description: "Messages shorter than 10 characters"
+
+  # Custom function filters - leveraging the registered functions
+  - pattern: "tpt_info_line"
+    type: "custom_function"
+    description: "TPT informational messages (comprehensive check)"
+
+  - pattern: "java_stack_continuation"
+    type: "custom_function"
+    description: "Java stack trace continuation lines"
+
+  - pattern: "airflow_success_message"
+    type: "custom_function"
+    description: "Various Airflow success patterns"
+
+  # Progress and status messages
+  - pattern: "Progress:"
+    type: "starts_with"
+    description: "Progress update messages"
+
+  - pattern: "Status:"
+    type: "starts_with"
+    description: "Status update messages"
+
+  - pattern: "\\d+%\\s+(complete|done|finished)"
+    type: "regex"
+    description: "Percentage completion messages"
+
+# Error candidate classification settings
+classifier:
+  error_indicators:
     - "error"
     - "exception"
-    - "traceback"
-    - "stack trace"
     - "failed"
     - "failure"
-
-  medium:
-    - "warning"
-    - "timeout"
+    - "fatal"
+    - "critical"
+    - "traceback"
+    - "stack trace"
     - "connection refused"
+    - "timeout"
     - "permission denied"
     - "not found"
     - "invalid"
+    - "corrupt"
+    - "null pointer"
+    - "out of memory"
+    - "access denied"
+    - "authentication failed"
+    - "authorization failed"
+    - "sql error"
+    - "database error"
+    - "network error"
+    - "file not found"
+    - "cannot connect"
+    - "connection lost"
+    - "unexpected"
+    - "aborted"
+    - "cancelled"
+    - "interrupted"
 
-  low:
-    - "deprecated"
-    - "retrying"
-    - "skipping"
+  error_levels:
+    - "ERROR"
+    - "CRITICAL"
+    - "FATAL"
+    - "SEVERE"
+    - "WARN"  # Sometimes warnings are actual errors in disguise
+
+  # Lower threshold since we have good filtering
+  min_confidence_score: 0.2
+
+# Advanced settings for future enhancements
+advanced:
+  enable_caching: true
+  cache_size: 1000
+  enable_metrics: true
+  rule_priority_enabled: false  # Future feature for rule ordering

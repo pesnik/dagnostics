@@ -7,6 +7,7 @@ import yaml
 from typer import Argument, Option
 
 from dagnostics.core.models import AnalysisResult, AppConfig, OllamaLLMConfig
+from dagnostics.llm.filter_factory import FilterFactory
 from dagnostics.utils.sms import send_sms_alert
 
 
@@ -248,7 +249,6 @@ def notify_failures(
         OpenAIProvider,
     )
     from dagnostics.llm.log_clusterer import LogClusterer
-    from dagnostics.llm.pattern_filter import ErrorPatternFilter
     from dagnostics.monitoring.airflow_client import AirflowClient
     from dagnostics.monitoring.analyzer import DAGAnalyzer
 
@@ -259,11 +259,15 @@ def notify_failures(
         password=config.airflow.password,
         db_connection=config.airflow.database_url,
         verify_ssl=False,
+        db_timezone_offset=config.airflow.db_timezone_offset,
     )
 
     # Use config-based baseline configuration
-    clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
-    filter = ErrorPatternFilter()
+    if config.monitoring.baseline_usage == "stored":
+        clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+    else:
+        clusterer = LogClusterer()
+    filter = FilterFactory.create_for_notifications(config)
 
     # LLM provider selection (reuse logic from analyze)
     llm_provider_instance: Union[
