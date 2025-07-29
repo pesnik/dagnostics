@@ -118,17 +118,17 @@ filter_rules:
     description: "Messages shorter than 10 characters"
 
   # Custom function filters - leveraging the registered functions
-  - pattern: "tpt_info_line"
-    type: "custom_function"
-    description: "TPT informational messages (comprehensive check)"
+  # - pattern: "tpt_info_line"
+  #   type: "custom_function"
+  #   description: "TPT informational messages (comprehensive check)"
 
-  - pattern: "java_stack_continuation"
-    type: "custom_function"
-    description: "Java stack trace continuation lines"
+  # - pattern: "java_stack_continuation"
+  #   type: "custom_function"
+  #   description: "Java stack trace continuation lines"
 
-  - pattern: "airflow_success_message"
-    type: "custom_function"
-    description: "Various Airflow success patterns"
+  # - pattern: "airflow_success_message"
+  #   type: "custom_function"
+  #   description: "Various Airflow success patterns"
 
   # Progress and status messages
   - pattern: "Progress:"
