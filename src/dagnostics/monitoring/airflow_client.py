@@ -73,6 +73,92 @@ class AirflowAPIClient:
             )
             raise
 
+    def get_task_tries(
+        self, dag_id: str, task_id: str, run_id: str
+    ) -> List[TaskInstance]:
+        """Fetch all tries for a specific task instance from Airflow API"""
+        url = f"{self.base_url}/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/tries"
+        logger.debug(f"Fetching task tries from URL: {url}")
+
+        response = None
+
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+
+            data = response.json()
+            task_instances = []
+
+            for task_data in data.get("task_instances", []):
+                # Parse datetime fields
+                start_date = None
+                end_date = None
+
+                if task_data.get("start_date"):
+                    try:
+                        from datetime import datetime
+
+                        start_date = datetime.fromisoformat(
+                            task_data["start_date"].replace("Z", "+00:00")
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Failed to parse start_date: {task_data.get('start_date')}"
+                        )
+
+                if task_data.get("end_date"):
+                    try:
+                        from datetime import datetime
+
+                        end_date = datetime.fromisoformat(
+                            task_data["end_date"].replace("Z", "+00:00")
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Failed to parse end_date: {task_data.get('end_date')}"
+                        )
+
+                task_instance = TaskInstance(
+                    dag_id=task_data["dag_id"],
+                    task_id=task_data["task_id"],
+                    run_id=task_data["dag_run_id"],
+                    state=task_data["state"],
+                    start_date=start_date,
+                    end_date=end_date,
+                    try_number=task_data["try_number"],
+                )
+                task_instances.append(task_instance)
+
+            return task_instances
+
+        except requests.exceptions.HTTPError as http_err:
+            error_details = (
+                f" - Response: {response.text}" if response is not None else ""
+            )
+            logger.error(
+                f"HTTP error fetching task tries for {dag_id}.{task_id} (run_id: {run_id}) from {url}: {http_err}{error_details}"
+            )
+            raise
+        except requests.exceptions.ConnectionError as conn_err:
+            logger.error(
+                f"Connection error fetching task tries for {dag_id}.{task_id} (run_id: {run_id}) from {url}: {conn_err}"
+            )
+            raise
+        except requests.exceptions.Timeout as timeout_err:
+            logger.error(
+                f"Timeout fetching task tries for {dag_id}.{task_id} (run_id: {run_id}) from {url}: {timeout_err}"
+            )
+            raise
+        except requests.RequestException as e:
+            error_details = (
+                f" - Response: {response.text}" if response is not None else ""
+            )
+            logger.error(
+                f"""An unknown request error occurred fetching task tries for
+                    {dag_id}.{task_id} (run_id: {run_id}) from {url}: {e}{error_details}"""
+            )
+            raise
+
 
 class AirflowDBClient:
     """Client for Airflow MetaDB interactions"""
@@ -128,7 +214,7 @@ class AirflowDBClient:
             start_date,
             end_date,
             try_number
-        FROM task_instance_history
+        FROM task_instance
         WHERE dag_id = :dag_id
         AND task_id = :task_id
         AND state = 'success'
@@ -163,6 +249,11 @@ class AirflowClient:
         self, dag_id: str, task_id: str, run_id: str, try_number: int = 1
     ) -> str:
         return self.api_client.get_task_logs(dag_id, task_id, run_id, try_number)
+
+    def get_task_tries(
+        self, dag_id: str, task_id: str, run_id: str
+    ) -> List[TaskInstance]:
+        return self.api_client.get_task_tries(dag_id, task_id, run_id)
 
     def get_failed_tasks(self, minutes_back: int = 60) -> List[TaskInstance]:
         return self.db_client.get_failed_tasks(minutes_back)

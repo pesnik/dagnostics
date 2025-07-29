@@ -349,16 +349,63 @@ def notify_failures(
 
     for task in failed_tasks:
         try:
-            # Use LLM-based error extraction for SMS notifications
-            summary = analyzer.extract_task_error_for_sms(
-                task.dag_id, task.task_id, task.run_id, task.try_number
+            # Get all tries for this task instance
+            typer.echo(
+                f"🔍 Fetching tries for {task.dag_id}.{task.task_id} (run: {task.run_id})..."
             )
-            recipients = get_recipients_for_task(task)
-            if dry_run:
-                typer.echo(f"[DRY RUN] Would send to {recipients}: {summary}")
-            else:
-                sms_config = config.alerts.sms.dict()
-                send_sms_alert(summary, recipients, sms_config)
-                typer.echo(f"Sent to {recipients}: {summary}")
+            task_tries = airflow_client.get_task_tries(
+                task.dag_id, task.task_id, task.run_id
+            )
+
+            # Filter only failed tries
+            failed_tries = [
+                try_instance
+                for try_instance in task_tries
+                if try_instance.state == "failed"
+            ]
+
+            if not failed_tries:
+                typer.echo(
+                    f"⚠️  No failed tries found for {task.dag_id}.{task.task_id} (run: {task.run_id})"
+                )
+                continue
+
+            # Process each failed try
+            for failed_try in failed_tries:
+                try:
+                    typer.echo(
+                        f"📝 Analyzing {task.dag_id}.{task.task_id} (run: {task.run_id}, try: {failed_try.try_number})..."
+                    )
+
+                    summary = analyzer.extract_task_error_for_sms(
+                        failed_try.dag_id,
+                        failed_try.task_id,
+                        failed_try.run_id,
+                        failed_try.try_number,
+                    )
+
+                    recipients = get_recipients_for_task(failed_try)
+
+                    # Include try number in the summary for clarity
+                    enhanced_summary = f"{summary} (try {failed_try.try_number})"
+
+                    if dry_run:
+                        typer.echo(
+                            f"[DRY RUN] Would send to {recipients}: {enhanced_summary}"
+                        )
+                    else:
+                        sms_config = config.alerts.sms.dict()
+                        send_sms_alert(enhanced_summary, recipients, sms_config)
+                        typer.echo(f"📱 Sent to {recipients}: {enhanced_summary}")
+
+                except Exception as e:
+                    typer.echo(
+                        f"❌ Error processing {task.dag_id}.{task.task_id} (try {failed_try.try_number}): {e}",
+                        err=True,
+                    )
+
         except Exception as e:
-            typer.echo(f"Error processing {task.dag_id}.{task.task_id}: {e}", err=True)
+            typer.echo(
+                f"❌ Error fetching tries for {task.dag_id}.{task.task_id} (run: {task.run_id}): {e}",
+                err=True,
+            )
