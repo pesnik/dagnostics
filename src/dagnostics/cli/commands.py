@@ -358,6 +358,8 @@ def notify_failures(
         # Fall back to default recipients
         return config.alerts.sms.default_recipients
 
+    failed_tasks = [task for task in failed_tasks if task.try_number > 0]
+
     for task in failed_tasks:
         try:
             # Get all tries for this task instance
@@ -372,7 +374,7 @@ def notify_failures(
             failed_tries = [
                 try_instance
                 for try_instance in task_tries
-                if try_instance.state == "failed"
+                if try_instance.state == "failed" and try_instance.try_number > 0
             ]
 
             if not failed_tries:
