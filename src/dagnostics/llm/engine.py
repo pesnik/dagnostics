@@ -152,7 +152,8 @@ class GeminiProvider(LLMProvider):
                 import google.generativeai as genai
 
                 temp_model = genai.GenerativeModel(  # type: ignore
-                    self.model, generation_config=generation_config  # type: ignore
+                    self.model,
+                    generation_config=generation_config,  # type: ignore
                 )
                 response = temp_model.generate_content(prompt)
             else:

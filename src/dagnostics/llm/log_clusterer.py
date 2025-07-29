@@ -2,13 +2,13 @@ import logging
 import os
 import pickle  # nosec B403 # Data is from trusted internal sources only
 from datetime import datetime
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from drain3 import TemplateMiner
 from drain3.file_persistence import FilePersistence
 from drain3.template_miner_config import TemplateMinerConfig
 
-from dagnostics.core.models import DrainCluster, LogEntry
+from dagnostics.core.models import AppConfig, DrainCluster, LogEntry
 
 logger = logging.getLogger(__name__)
 
@@ -17,30 +17,23 @@ class LogClusterer:
     """Drain3-based log clustering for baseline creation and anomaly detection"""
 
     def __init__(
-        self, config_path: Optional[str] = None, persistence_path: Optional[str] = None
+        self,
+        app_config: AppConfig,
+        config_path: Optional[str] = None,
+        persistence_path: Optional[str] = None,
     ):
+        self.app_config = app_config
         self.config = TemplateMinerConfig()
         if config_path:
             self.config.load(config_path)
 
-        persistence_handler = None
-        if persistence_path:
-            persistence_handler = FilePersistence(persistence_path)
-
-        # Create TemplateMiner with proper config and persistence
-        # Pass persistence_handler only if it's not None
-        if persistence_handler:
-            self.drain = TemplateMiner(
-                persistence_handler=persistence_handler, config=self.config
-            )
-        else:
-            self.drain = TemplateMiner(config=self.config)
-
         self.persistence_path = persistence_path
-        self.baseline_clusters: Dict[str, Set[str]] = {}
         self.baseline_timestamps: Dict[str, datetime] = (
             {}
         )  # Track baseline creation times
+        self.baseline_drains_cache: Dict[str, TemplateMiner] = (
+            {}
+        )  # In-memory cache for real-time mode
         self.load_baseline_state()
 
     def build_baseline_clusters(
@@ -51,30 +44,19 @@ class LogClusterer:
             f"Building baseline for {dag_id}.{task_id} with {len(successful_logs)} logs"
         )
 
-        # Create a separate drain instance for this baseline
-        baseline_persistence_handler = None
-        if self.persistence_path:
-            baseline_path = f"{self.persistence_path}.baseline.{dag_id}.{task_id}"
-            baseline_persistence_handler = FilePersistence(baseline_path)
-
-        # Pass baseline_persistence_handler only if it's not None
-        if baseline_persistence_handler:
-            baseline_drain = TemplateMiner(
-                persistence_handler=baseline_persistence_handler, config=self.config
-            )
-        else:
-            baseline_drain = TemplateMiner(config=self.config)
-
         baseline_key = f"{dag_id}.{task_id}"
-        cluster_templates = set()
 
+        # Create baseline drain instance
+        baseline_drain = self._create_baseline_drain_instance(dag_id, task_id)
+        if not baseline_drain:
+            return {}
+
+        # Ingest all successful logs into baseline
         for log_entry in successful_logs:
             result = baseline_drain.add_log_message(log_entry.message)
-            if result["change_type"] != "none":
-                cluster_templates.add(result["template_mined"])
+            print(result)
 
-        # Store baseline templates
-        self.baseline_clusters[baseline_key] = cluster_templates
+        # Update baseline timestamp
         self.baseline_timestamps[baseline_key] = datetime.now()
 
         # Convert to DrainCluster objects
@@ -93,6 +75,138 @@ class LogClusterer:
         self.save_baseline_state()
         logger.info(f"Created {len(clusters)} baseline clusters for {baseline_key}")
         return clusters
+
+    def identify_anomalous_patterns(
+        self, failed_logs: List[LogEntry], dag_id: str, task_id: str
+    ) -> List[LogEntry]:
+        """
+        Identify log entries that represent new/anomalous patterns.
+        Uses temporary drain instances to avoid polluting the baseline.
+        """
+        baseline_key = f"{dag_id}.{task_id}"
+
+        if baseline_key not in self.baseline_timestamps:
+            logger.warning(
+                f"No baseline found for {baseline_key}. All {len(failed_logs)} logs will be considered anomalous."
+            )
+            return failed_logs
+
+        # Create temporary drain instance for analysis
+        temp_drain = self._create_temp_drain_instance()
+        if not temp_drain:
+            logger.error("Failed to create temporary drain instance")
+            return failed_logs
+
+        # Load baseline drain instance (read-only)
+        baseline_drain = self._load_baseline_drain_instance(dag_id, task_id)
+        if not baseline_drain:
+            logger.warning(
+                f"Could not load baseline drain for {baseline_key}. Treating all logs as anomalous."
+            )
+            return failed_logs
+
+        # First, train temporary drain with baseline patterns
+        # This preserves the baseline without modifying it
+        for cluster in baseline_drain.drain.clusters:
+            # Add one representative message from each baseline cluster to temp drain
+            if cluster.log_template_tokens:
+                # Reconstruct a message from the template (approximate)
+                template_message = " ".join(cluster.log_template_tokens)
+                temp_drain.add_log_message(template_message)
+
+        anomalous_logs = []
+
+        # Now test failed logs against the temp drain (which has baseline knowledge)
+        for log_entry in failed_logs:
+            result = temp_drain.add_log_message(log_entry.message)
+
+            # Check if this created a new cluster (anomalous pattern)
+            if result["change_type"] == "cluster_created":
+                anomalous_logs.append(log_entry)
+                logger.debug(
+                    f"Anomalous pattern detected: '{result['template_mined']}'"
+                )
+            else:
+                logger.debug(f"Log matches known pattern: '{result['template_mined']}'")
+
+        logger.info(
+            f"Found {len(anomalous_logs)} anomalous patterns out of {len(failed_logs)} logs for {baseline_key}"
+        )
+        return anomalous_logs
+
+    def _create_baseline_drain_instance(
+        self, dag_id: str, task_id: str
+    ) -> Optional[TemplateMiner]:
+        """Create a drain instance for baseline storage"""
+        baseline_key = f"{dag_id}.{task_id}"
+
+        if (
+            self.app_config.monitoring.baseline_usage == "stored"
+            and self.persistence_path
+        ):
+            baseline_drain_path = f"{self.persistence_path}.baseline.{dag_id}.{task_id}"
+            os.makedirs(os.path.dirname(baseline_drain_path), exist_ok=True)
+
+            try:
+                persistence_handler = FilePersistence(baseline_drain_path)
+                baseline_drain = TemplateMiner(
+                    persistence_handler=persistence_handler, config=self.config
+                )
+                return baseline_drain
+            except Exception as e:
+                logger.error(f"Failed to create persistent baseline drain: {e}")
+                return None
+        else:
+            # Real-time mode - create and cache in memory
+            try:
+                baseline_drain = TemplateMiner(config=self.config)
+                self.baseline_drains_cache[baseline_key] = baseline_drain
+                return baseline_drain
+            except Exception as e:
+                logger.error(f"Failed to create in-memory baseline drain: {e}")
+                return None
+
+    def _load_baseline_drain_instance(
+        self, dag_id: str, task_id: str
+    ) -> Optional[TemplateMiner]:
+        """Load existing baseline drain instance for read-only operations"""
+        baseline_key = f"{dag_id}.{task_id}"
+
+        if (
+            self.app_config.monitoring.baseline_usage == "stored"
+            and self.persistence_path
+        ):
+            baseline_drain_path = f"{self.persistence_path}.baseline.{dag_id}.{task_id}"
+
+            if os.path.exists(baseline_drain_path):
+                try:
+                    persistence_handler = FilePersistence(baseline_drain_path)
+                    return TemplateMiner(
+                        persistence_handler=persistence_handler, config=self.config
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to load baseline drain from {baseline_drain_path}: {e}"
+                    )
+                    return None
+            else:
+                logger.warning(f"Baseline drain file not found: {baseline_drain_path}")
+                return None
+        else:
+            # Real-time mode - load from memory cache
+            if baseline_key in self.baseline_drains_cache:
+                return self.baseline_drains_cache[baseline_key]
+            else:
+                logger.warning(f"No baseline drain found in cache for {baseline_key}")
+                return None
+
+    def _create_temp_drain_instance(self) -> Optional[TemplateMiner]:
+        """Create a temporary drain instance for analysis (no persistence)"""
+        try:
+            return TemplateMiner(config=self.config)
+        except Exception as e:
+            logger.error(f"Failed to create temporary drain instance: {e}")
+            return None
 
     def is_baseline_stale(self, dag_id: str, task_id: str, refresh_days: int) -> bool:
         """Check if baseline is stale and needs refresh"""
@@ -131,84 +245,27 @@ class LogClusterer:
             return True
         return False
 
-    def identify_anomalous_patterns(
-        self, failed_logs: List[LogEntry], dag_id: str, task_id: str
-    ) -> List[LogEntry]:
-        """Identify log entries that don't match baseline patterns"""
-        baseline_key = f"{dag_id}.{task_id}"
-        baseline_templates = self.baseline_clusters.get(baseline_key, set())
-
-        if not baseline_templates:
-            logger.warning(f"No baseline found for {baseline_key}, returning all logs")
-            return failed_logs
-
-        anomalous_logs = []
-
-        for log_entry in failed_logs:
-            # Test against baseline patterns
-            result = self.drain.add_log_message(log_entry.message)
-            # template = result["template_mined"]
-
-            # Check if this template is similar to any baseline template
-            is_baseline_pattern = result["change_type"] == "cluster_created"
-            # is_baseline_pattern = any(
-            #     self._calculate_template_similarity(template, baseline_template) > 0.8
-            #     for baseline_template in baseline_templates
-            # )
-
-            if is_baseline_pattern:
-                anomalous_logs.append(log_entry)
-
-        logger.info(
-            f"Found {len(anomalous_logs)} anomalous patterns out of {len(failed_logs)} logs"
-        )
-        return anomalous_logs
-
-    def _calculate_template_similarity(self, template1: str, template2: str) -> float:
-        """Calculate similarity between two templates"""
-        # Handle None values
-        if template1 is None:
-            template1 = ""
-        if template2 is None:
-            template2 = ""
-
-        tokens1 = set(template1.split())
-        tokens2 = set(template2.split())
-
-        if not tokens1 and not tokens2:
-            return 1.0
-        if not tokens1 or not tokens2:
-            return 0.0
-
-        intersection = len(tokens1.intersection(tokens2))
-        union = len(tokens1.union(tokens2))
-
-        return intersection / union if union > 0 else 0.0
-
     def save_baseline_state(self):
-        """Persist baseline clusters state"""
+        """Persist baseline timestamps (clusters are persisted via Drain3 FilePersistence)"""
         if self.persistence_path:
-            baseline_state_path = f"{self.persistence_path}.baseline_clusters"
+            baseline_state_path = f"{self.persistence_path}.baseline_clusters_state.pkl"
             os.makedirs(os.path.dirname(baseline_state_path), exist_ok=True)
             try:
                 state = {
-                    "baseline_clusters": {
-                        k: list(v) for k, v in self.baseline_clusters.items()
-                    },
                     "baseline_timestamps": {
                         k: v.isoformat() for k, v in self.baseline_timestamps.items()
                     },
                 }
                 with open(baseline_state_path, "wb") as f:
                     pickle.dump(state, f)
-                logger.debug("Saved baseline clusters state")
+                logger.debug(f"Saved baseline state to {baseline_state_path}")
             except Exception as e:
-                logger.error(f"Failed to save baseline clusters state: {e}")
+                logger.error(f"Failed to save baseline state: {e}")
 
     def load_baseline_state(self):
-        """Load baseline clusters state"""
+        """Load baseline timestamps"""
         if self.persistence_path:
-            baseline_state_path = f"{self.persistence_path}.baseline_clusters"
+            baseline_state_path = f"{self.persistence_path}.baseline_clusters_state.pkl"
             if os.path.exists(baseline_state_path):
                 try:
                     with open(baseline_state_path, "rb") as f:
@@ -216,15 +273,55 @@ class LogClusterer:
                             f
                         )  # nosec B301 # Data is from trusted internal sources only
 
-                    if "baseline_clusters" in state:
-                        self.baseline_clusters = {
-                            k: set(v) for k, v in state["baseline_clusters"].items()
-                        }
                     if "baseline_timestamps" in state:
                         self.baseline_timestamps = {
                             k: datetime.fromisoformat(v)
                             for k, v in state["baseline_timestamps"].items()
                         }
-                        logger.info("Loaded baseline clusters state from persistence")
+                    logger.info(f"Loaded baseline state from {baseline_state_path}")
                 except Exception as e:
-                    logger.error(f"Failed to load baseline clusters state: {e}")
+                    logger.error(f"Failed to load baseline state: {e}")
+
+    def cleanup_old_baselines(self, retention_days: int = 30):
+        """Clean up old baseline files to manage disk space"""
+        if not self.persistence_path:
+            return
+
+        try:
+            base_dir = os.path.dirname(self.persistence_path)
+            current_time = datetime.now()
+
+            for filename in os.listdir(base_dir):
+                if filename.startswith(
+                    os.path.basename(self.persistence_path) + ".baseline."
+                ):
+                    filepath = os.path.join(base_dir, filename)
+
+                    # Check file age
+                    file_age = current_time - datetime.fromtimestamp(
+                        os.path.getmtime(filepath)
+                    )
+
+                    if file_age.days > retention_days:
+                        os.remove(filepath)
+                        logger.info(f"Removed old baseline file: {filename}")
+
+        except Exception as e:
+            logger.error(f"Failed to cleanup old baselines: {e}")
+
+    def clear_memory_cache(self):
+        """Clear in-memory baseline cache (useful for testing or memory management)"""
+        self.baseline_drains_cache.clear()
+        logger.info("Cleared baseline drains memory cache")
+
+    def get_cache_stats(self) -> dict:
+        """Get statistics about the in-memory cache"""
+        return {
+            "cached_baselines": len(self.baseline_drains_cache),
+            "baseline_keys": list(self.baseline_drains_cache.keys()),
+            "cache_mode": (
+                "real-time"
+                if self.app_config.monitoring.baseline_usage != "stored"
+                else "stored"
+            ),
+        }

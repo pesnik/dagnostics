@@ -53,6 +53,12 @@ class FilterFactory:
                 pattern and pattern in log_entry.message for pattern in config_patterns
             )
 
+        def standard_error_log_except_start_with_caused_by(log_entry: LogEntry) -> bool:
+            return (
+                not log_entry.message.startswith("[")
+                and "Caused by" not in log_entry.message
+            )
+
         # Register custom functions
         filter_instance.add_custom_function(
             "notification_spam",
@@ -61,6 +67,11 @@ class FilterFactory:
         )
         filter_instance.add_custom_function(
             "config_noise", is_config_noise, "Configuration-related noise"
+        )
+        filter_instance.add_custom_function(
+            "standard_error_log",
+            standard_error_log_except_start_with_caused_by,
+            "Configuration-related noise",
         )
 
         # Add runtime filters for notification context

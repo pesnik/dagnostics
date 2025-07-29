@@ -225,62 +225,6 @@ class ErrorPatternFilter:
         # Load configuration
         self.load_configuration(config_path)
 
-        # Register default custom functions
-        self._register_default_custom_functions()
-
-    def _register_default_custom_functions(self):
-        """Register commonly used custom filter functions"""
-        custom_engine = self.engines[FilterRuleType.CUSTOM_FUNCTION]
-        if not isinstance(custom_engine, CustomFunctionFilterEngine):
-            logger.error("Custom function engine not properly initialized")
-            return
-
-        # TPT (Teradata Parallel Transporter) specific filters
-        def is_tpt_info_line(log_entry: LogEntry) -> bool:
-            tpt_patterns = [
-                "YAHOOOOOOOOOOOOOOOOOOOOOOO",
-                "Task failed with exception",
-                "Running TPT command:",
-                "Teradata Parallel Transporter Version",
-                "Total processor time used",
-                "sending SQL requests",
-                "Elapsed time",
-                "(status 12)",
-                "private log not specified",
-                "TPT Exit code set to",
-                "Running: ",
-                "no error details were provided.",
-                "Details of the failure can be found",
-            ]
-            return any(pattern in log_entry.message for pattern in tpt_patterns)
-
-        def is_java_stack_continuation(log_entry: LogEntry) -> bool:
-            """Check if line is a Java stack trace continuation"""
-            stripped = log_entry.message.strip()
-            return (
-                stripped.startswith("at ")
-                or stripped.startswith("Caused by:")
-                or stripped.startswith("...")
-            )
-
-        def is_airflow_success_message(log_entry: LogEntry) -> bool:
-            """Check for various Airflow success patterns"""
-            success_patterns = [
-                "Marking task as SUCCESS",
-                "Task exited with return code 0",
-                "Dependencies all met for",
-                "Task completed successfully",
-            ]
-            return any(pattern in log_entry.message for pattern in success_patterns)
-
-        custom_engine.register_function("tpt_info_line", is_tpt_info_line)
-        custom_engine.register_function(
-            "java_stack_continuation", is_java_stack_continuation
-        )
-        custom_engine.register_function(
-            "airflow_success_message", is_airflow_success_message
-        )
-
     def load_configuration(self, config_path: Optional[str] = None):
         """Load filtering configuration from file"""
         # Default configuration

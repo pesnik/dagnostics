@@ -67,7 +67,9 @@ def analyze(
             db_connection=config.airflow.database_url,
             verify_ssl=False,
         )
-        clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+        clusterer = LogClusterer(
+            persistence_path=config.drain3.persistence_path, app_config=config
+        )
         filter = ErrorPatternFilter()
 
         # Initialize LLM provider based on selection
@@ -264,9 +266,14 @@ def notify_failures(
 
     # Use config-based baseline configuration
     if config.monitoring.baseline_usage == "stored":
-        clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+        clusterer = LogClusterer(
+            persistence_path=config.drain3.persistence_path,
+            app_config=config,
+            config_path="config/drain3.ini",
+        )
     else:
-        clusterer = LogClusterer()
+        clusterer = LogClusterer(app_config=config, config_path="config/drain3.ini")
+
     filter = FilterFactory.create_for_notifications(config)
 
     # LLM provider selection (reuse logic from analyze)

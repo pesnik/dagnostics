@@ -1,19 +1,5 @@
 filter_rules:
   # Basic log level filters (regex-based for flexibility)
-  - pattern: ".*\\b(INFO|info)\\b.*"
-    type: "regex"
-    description: "Info level logs"
-    case_sensitive: false
-
-  - pattern: ".*\\b(DEBUG|debug)\\b.*"
-    type: "regex"
-    description: "Debug level logs"
-
-  - pattern: ".*\\b(TRACE|trace)\\b.*"
-    type: "regex"
-    description: "Trace level logs"
-
-  # Startup and completion messages
   - pattern: ".*\\b(Starting|starting|started)\\b.*"
     type: "regex"
     description: "Startup messages"
@@ -21,19 +7,6 @@ filter_rules:
   - pattern: ".*\\b(Finished|finished|completed|done)\\b.*"
     type: "regex"
     description: "Completion messages"
-
-  # Timestamp-only lines and separators
-  - pattern: "^\\s*\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}.*$"
-    type: "regex"
-    description: "Timestamp-only lines"
-
-  - pattern: "^\\s*={3,}\\s*$"
-    type: "regex"
-    description: "Separator lines with equals"
-
-  - pattern: "^\\s*-{3,}\\s*$"
-    type: "regex"
-    description: "Separator lines with dashes"
 
   # Airflow-specific filters (using substring for better performance)
   - pattern: "Marking task as SUCCESS"
