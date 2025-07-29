@@ -142,7 +142,7 @@ class DAGAnalyzer:
 
             error_line = self.llm.extract_error_line(error_candidates)
 
-            return f"{dag_id}.{task_id}: {error_line}"
+            return f"DAG: {dag_id} Task: {task_id}: {error_line}"
 
         except Exception as e:
             logger.error(

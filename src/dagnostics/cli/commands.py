@@ -400,7 +400,7 @@ def notify_failures(
                     recipients = get_recipients_for_task(failed_try)
 
                     # Include try number in the summary for clarity
-                    enhanced_summary = f"{summary} (try {failed_try.try_number})"
+                    enhanced_summary = f"{summary} Attempt: {failed_try.try_number}"
 
                     if dry_run:
                         typer.echo(
