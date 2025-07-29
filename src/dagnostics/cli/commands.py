@@ -28,6 +28,12 @@ def analyze(
     task_id: str = Argument(..., help="ID of the task to analyze"),
     run_id: str = Argument(..., help="Run ID of the task instance"),
     try_number: int = Argument(..., help="Attempt number of the task to analyze"),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
     output_format: OutputFormat = Option(
         OutputFormat.json, "--format", "-f", help="Output format"
     ),
@@ -57,7 +63,7 @@ def analyze(
 
     try:
         # Load configuration
-        config: AppConfig = load_config()
+        config: AppConfig = load_config(config_file)
 
         # Initialize components
         airflow_client = AirflowClient(
@@ -199,36 +205,78 @@ def _print_text_analysis(result: AnalysisResult, verbose: bool):
 
 def start(
     interval: int = Option(5, "--interval", "-i", help="Check interval in minutes"),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
     daemon: bool = Option(False, "--daemon", help="Run as daemon"),
 ):
     """Start continuous monitoring."""
-    typer.echo(f"🔄 Starting DAGnostics monitor (interval: {interval}m)")
+    try:
+        # from dagnostics.core.config import load_config
 
-    # Implementation would go here
-    # This would run the monitoring loop
-    typer.echo("Monitor started successfully!")
+        # config = load_config(config_file)
+
+        typer.echo(f"🔄 Starting DAGnostics monitor (interval: {interval}m)")
+        # Implementation would go here
+        typer.echo("Monitor started successfully!")
+
+    except FileNotFoundError as e:
+        typer.echo(f"❌ Configuration error: {e}", err=True)
+        typer.echo(
+            "💡 Run 'dagnostics init' to create a default configuration file.", err=True
+        )
+        raise typer.Exit(code=1)
 
 
 def report(
     daily: bool = Option(False, "--daily", help="Generate daily report"),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
     output_format: ReportFormat = Option(
         ReportFormat.html, "--format", "-f", help="Report format"
     ),
     output: Optional[str] = Option(None, "--output", "-o", help="Output file path"),
 ):
     """Generate analysis reports."""
-    report_type = "daily" if daily else "summary"
-    typer.echo(f"📊 Generating {report_type} report in {output_format.value} format...")
+    try:
+        # from dagnostics.core.config import load_config
 
-    if output:
-        typer.echo(f"Report saved to: {output}")
-    else:
-        typer.echo("Report generated successfully!")
+        # config = load_config(config_file)
+
+        report_type = "daily" if daily else "summary"
+        typer.echo(
+            f"📊 Generating {report_type} report in {output_format.value} format..."
+        )
+
+        if output:
+            typer.echo(f"Report saved to: {output}")
+        else:
+            typer.echo("Report generated successfully!")
+
+    except FileNotFoundError as e:
+        typer.echo(f"❌ Configuration error: {e}", err=True)
+        typer.echo(
+            "💡 Run 'dagnostics init' to create a default configuration file.", err=True
+        )
+        raise typer.Exit(code=1)
 
 
 def notify_failures(
     since_minutes: int = Option(
         60, "--since-minutes", "-s", help="Look back window in minutes"
+    ),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
     ),
     dry_run: bool = Option(False, "--dry-run", help="Don't actually send SMS"),
     llm_provider: str = Option(
@@ -254,7 +302,8 @@ def notify_failures(
     from dagnostics.monitoring.airflow_client import AirflowClient
     from dagnostics.monitoring.analyzer import DAGAnalyzer
 
-    config = load_config()
+    config = load_config(config_file)
+
     airflow_client = AirflowClient(
         base_url=config.airflow.base_url,
         username=config.airflow.username,

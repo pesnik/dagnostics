@@ -7,7 +7,6 @@ setup_logging()
 
 app = typer.Typer(help="DAGnostics - Intelligent ETL Monitoring System CLI")
 
-
 app.command()(start)
 app.command()(analyze)
 app.command()(notify_failures)
