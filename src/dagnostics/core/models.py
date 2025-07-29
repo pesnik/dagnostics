@@ -122,6 +122,7 @@ class Drain3Config(BaseModel):
     max_clusters: int = Field(..., ge=1)
     extra_delimiters: List[str] = Field(default_factory=list)
     persistence_path: str
+    config_path: str
 
 
 class OllamaLLMConfig(BaseModel):

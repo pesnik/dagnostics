@@ -73,8 +73,11 @@ def analyze(
             db_connection=config.airflow.database_url,
             verify_ssl=False,
         )
+        # Assuming LogClusterer can take config_path from config.drain3
         clusterer = LogClusterer(
-            persistence_path=config.drain3.persistence_path, app_config=config
+            persistence_path=config.drain3.persistence_path,
+            app_config=config,
+            config_path=config.drain3.config_path,
         )
         filter = ErrorPatternFilter()
 
@@ -313,15 +316,21 @@ def notify_failures(
         db_timezone_offset=config.airflow.db_timezone_offset,
     )
 
+    # Get the drain3 config path from the loaded configuration
+    drain3_config_file_path = config.drain3.config_path
+
     # Use config-based baseline configuration
     if config.monitoring.baseline_usage == "stored":
         clusterer = LogClusterer(
             persistence_path=config.drain3.persistence_path,
             app_config=config,
-            config_path="config/drain3.ini",
+            config_path=drain3_config_file_path,  # Use the path from config
         )
     else:
-        clusterer = LogClusterer(app_config=config, config_path="config/drain3.ini")
+        clusterer = LogClusterer(
+            app_config=config,
+            config_path=drain3_config_file_path,  # Use the path from config
+        )
 
     filter = FilterFactory.create_for_notifications(config)
 

@@ -275,11 +275,11 @@ class ErrorPatternFilter:
                     "type": "length_threshold",
                     "description": "Very short messages",
                 },
-                {
-                    "pattern": "tpt_info_line",
-                    "type": "custom_function",
-                    "description": "TPT informational messages",
-                },
+                # {
+                #     "pattern": "tpt_info_line",
+                #     "type": "custom_function",
+                #     "description": "TPT informational messages",
+                # },
             ],
             "classifier": {
                 "error_indicators": [

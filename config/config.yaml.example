@@ -14,6 +14,8 @@ drain3:
   max_clusters: 1000
   extra_delimiters: ["=", ":", ",", "!", "(", ")", "[", "]", "<", ">"]
   persistence_path: "data/clusters/drain3_state.pkl"
+  config_path: "config/drain3.ini"
+
 
 llm:
   default_provider: "ollama"
