@@ -330,13 +330,12 @@ class AirflowClient:
         verify_ssl: bool = True,
         db_timezone_offset: str = "+00:00",
     ):
-        logger.info(
-            f"AirflowClient initialized. Base URL: {base_url}, Username: {username}, DB: {db_connection}, TZ Offset: {db_timezone_offset}"
-        )
         self.api_client = AirflowAPIClient(
             base_url, username, password, verify_ssl=verify_ssl
         )
         self.db_client = AirflowDBClient(db_connection, db_timezone_offset)
+
+        logger.info("AirflowClient initialized.")
 
     def get_task_logs(
         self, dag_id: str, task_id: str, run_id: str, try_number: int = 1
