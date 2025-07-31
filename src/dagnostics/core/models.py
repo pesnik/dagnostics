@@ -29,6 +29,18 @@ class BaselineUsage(str, Enum):
     REAL_TIME = "real_time"
 
 
+class OutputFormat(str, Enum):
+    json = "json"
+    yaml = "yaml"
+    text = "text"
+
+
+class ReportFormat(str, Enum):
+    html = "html"
+    json = "json"
+    pdf = "pdf"
+
+
 class LogEntry(BaseModel):
     timestamp: datetime
     level: str

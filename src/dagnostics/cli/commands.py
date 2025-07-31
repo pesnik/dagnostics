@@ -1,26 +1,19 @@
 import json
-from enum import Enum
-from typing import Optional, Union  # Import Union
+from typing import Optional, Union
 
 import typer
 import yaml
 from typer import Argument, Option
 
-from dagnostics.core.models import AnalysisResult, AppConfig, OllamaLLMConfig
+from dagnostics.core.models import (
+    AnalysisResult,
+    AppConfig,
+    OllamaLLMConfig,
+    OutputFormat,
+    ReportFormat,
+)
 from dagnostics.llm.filter_factory import FilterFactory
 from dagnostics.utils.sms import send_sms_alert
-
-
-class OutputFormat(str, Enum):
-    json = "json"
-    yaml = "yaml"
-    text = "text"
-
-
-class ReportFormat(str, Enum):
-    html = "html"
-    json = "json"
-    pdf = "pdf"
 
 
 def analyze(
