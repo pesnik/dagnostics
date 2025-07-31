@@ -22,7 +22,6 @@ from dagnostics.llm.engine import (
 )
 from dagnostics.llm.filter_factory import FilterFactory
 from dagnostics.llm.log_clusterer import LogClusterer
-from dagnostics.llm.pattern_filter import ErrorPatternFilter
 from dagnostics.monitoring.airflow_client import AirflowClient
 from dagnostics.monitoring.analyzer import DAGAnalyzer
 
@@ -52,7 +51,7 @@ def initialize_components(
     )
 
     # Initialize filter
-    filter = ErrorPatternFilter()
+    filter = FilterFactory.create_for_notifications(config)
 
     # Initialize LLM
     llm_provider_instance = initialize_llm_provider(config, llm_provider)

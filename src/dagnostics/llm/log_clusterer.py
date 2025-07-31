@@ -230,6 +230,51 @@ class LogClusterer:
         baseline_age = datetime.now() - self.baseline_timestamps[baseline_key]
         return baseline_age.days
 
+    def baseline_cluster_size(self, dag_id: str, task_id: str) -> int:
+        """Get the number of clusters in the baseline for a given dag/task"""
+        baseline_key = f"{dag_id}.{task_id}"
+
+        try:
+            if (
+                self.app_config.monitoring.baseline_usage == "stored"
+                and self.persistence_path
+            ):
+                # For stored mode, load the baseline drain instance
+                baseline_drain = self._load_baseline_drain_instance(dag_id, task_id)
+                if baseline_drain and baseline_drain.drain.clusters:
+                    cluster_count = len(baseline_drain.drain.clusters)
+                    logger.debug(
+                        f"Baseline cluster count for {baseline_key}: {cluster_count}"
+                    )
+                    return cluster_count
+                else:
+                    logger.debug(
+                        f"No baseline clusters found for {baseline_key} in stored mode"
+                    )
+                    return 0
+            else:
+                # For real-time mode, check the in-memory cache
+                if baseline_key in self.baseline_drains_cache:
+                    baseline_drain = self.baseline_drains_cache[baseline_key]
+                    if baseline_drain and baseline_drain.drain.clusters:
+                        cluster_count = len(baseline_drain.drain.clusters)
+                        logger.debug(
+                            f"Baseline cluster count for {baseline_key}: {cluster_count}"
+                        )
+                        return cluster_count
+                    else:
+                        logger.debug(
+                            f"No baseline clusters found for {baseline_key} in cache"
+                        )
+                        return 0
+                else:
+                    logger.debug(f"No baseline found in cache for {baseline_key}")
+                    return 0
+
+        except Exception as e:
+            logger.error(f"Failed to get baseline cluster size for {baseline_key}: {e}")
+            return 0
+
     def refresh_baseline_if_needed(
         self,
         dag_id: str,

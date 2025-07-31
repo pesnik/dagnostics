@@ -156,7 +156,10 @@ class DAGAnalyzer:
         refresh_days = self._get_baseline_refresh_days()
 
         # Check if baseline refresh is needed
-        if self.clusterer.is_baseline_stale(dag_id, task_id, refresh_days):
+        if (
+            self.clusterer.is_baseline_stale(dag_id, task_id, refresh_days)
+            or self.clusterer.baseline_cluster_size(dag_id, task_id) < 1
+        ):
             logger.info(
                 f"Baseline for {dag_id}.{task_id} is stale or missing "
                 f"({self.clusterer.get_baseline_age_days(dag_id, task_id)} days old), building new baseline..."

@@ -379,19 +379,23 @@ class ErrorPatternFilter:
     def _is_error_candidate(self, log_entry: LogEntry) -> bool:
         """Check if log entry is likely an error candidate"""
         # First, check if it should be filtered out
-        if self._should_filter_out(log_entry):
-            return False
+        # if self._should_filter_out(log_entry):
+        # return False
 
+        return not self._should_filter_out(log_entry)
         # Then, check if it's a positive error candidate
-        is_candidate, confidence = self.classifier.is_error_candidate(log_entry)
-        return is_candidate
+        # is_candidate, confidence = self.classifier.is_error_candidate(log_entry)
+        # return is_candidate
 
     def _should_filter_out(self, log_entry: LogEntry) -> bool:
         """Check if log entry should be filtered out based on rules"""
         for rule in self.filter_rules:
+            # logger.info(f"Applying rule: {rule.description} to {log_entry.message}")
             engine = self.engines.get(rule.rule_type)
             if engine and engine.matches(log_entry, rule):
-                logger.debug(f"Filtered out log entry due to rule: {rule.description}")
+                logger.info(
+                    f"Filtered out log entry {log_entry.message} due to rule: {rule.description}"
+                )
                 return True
         return False
 

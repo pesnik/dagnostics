@@ -29,6 +29,14 @@ filter_rules:
     type: "substring"
     description: "Job success messages"
 
+  - pattern: "Task:<Task[^>]*> dag:<DAG:[^>]*> dagrun:<DagRun[^>]*state:[^>]*>"
+    type: "regex"
+    description: "Airflow tasinstance info"
+
+  - pattern: "downstream tasks scheduled"
+    type: "substring"
+    description: "Airflow taskinstance scheduled check"
+
   # Warning types that are usually not critical
   - pattern: "UserWarning"
     type: "substring"
