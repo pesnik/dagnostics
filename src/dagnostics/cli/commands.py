@@ -1,18 +1,12 @@
 import json
-from typing import Optional, Union
+from typing import Optional
 
 import typer
 import yaml
 from typer import Argument, Option
 
-from dagnostics.core.models import (
-    AnalysisResult,
-    AppConfig,
-    OllamaLLMConfig,
-    OutputFormat,
-    ReportFormat,
-)
-from dagnostics.llm.filter_factory import FilterFactory
+from dagnostics.cli.utils import initialize_components
+from dagnostics.core.models import AnalysisResult, OutputFormat, ReportFormat
 from dagnostics.utils.sms import send_sms_alert
 
 
@@ -39,121 +33,9 @@ def analyze(
     ),
 ):
     """Analyze a specific task failure."""
-    # Local imports are fine within a command function if they are only used there
-    from dagnostics.core.config import load_config
-    from dagnostics.core.models import GeminiLLMConfig, OpenAILLMConfig
-    from dagnostics.llm.engine import LLMProvider  # Import the base LLMProvider type
-    from dagnostics.llm.engine import (
-        GeminiProvider,
-        LLMEngine,
-        OllamaProvider,
-        OpenAIProvider,
-    )
-    from dagnostics.llm.log_clusterer import LogClusterer
-    from dagnostics.llm.pattern_filter import ErrorPatternFilter
-    from dagnostics.monitoring.airflow_client import AirflowClient
-    from dagnostics.monitoring.analyzer import DAGAnalyzer
-
     try:
-        # Load configuration
-        config: AppConfig = load_config(config_file)
+        _, analyzer = initialize_components(config_file, llm_provider)
 
-        # Initialize components
-        airflow_client = AirflowClient(
-            base_url=config.airflow.base_url,
-            username=config.airflow.username,
-            password=config.airflow.password,
-            db_connection=config.airflow.database_url,
-            verify_ssl=False,
-        )
-        # Assuming LogClusterer can take config_path from config.drain3
-        clusterer = LogClusterer(
-            persistence_path=config.drain3.persistence_path,
-            app_config=config,
-            config_path=config.drain3.config_path,
-        )
-        filter = ErrorPatternFilter()
-
-        # Initialize LLM provider based on selection
-        # Define llm_provider_instance with a Union of all possible provider types and None
-        llm_provider_instance: Union[
-            OllamaProvider, OpenAIProvider, GeminiProvider, LLMProvider, None
-        ] = None
-
-        if llm_provider == "ollama":
-            ollama_config = config.llm.providers.get("ollama")
-            if not ollama_config:
-                typer.echo("Error: Ollama LLM configuration not found.", err=True)
-                raise typer.Exit(code=1)
-
-            # Ensure ollama_config is of the correct type
-            if not isinstance(ollama_config, OllamaLLMConfig):
-                typer.echo(
-                    "Error: Ollama LLM configuration is not of type OllamaLLMConfig.",
-                    err=True,
-                )
-                raise typer.Exit(code=1)
-
-            llm_provider_instance = OllamaProvider(
-                base_url=(
-                    ollama_config.base_url
-                    if ollama_config.base_url
-                    else "http://localhost:11434"
-                ),
-                model=ollama_config.model,
-            )
-
-        elif llm_provider == "openai":
-            openai_config = config.llm.providers.get("openai")
-            if not openai_config:
-                typer.echo("Error: OpenAI LLM configuration not found.", err=True)
-                raise typer.Exit(code=1)
-
-            # Ensure openai_config is of the correct type
-            if not isinstance(openai_config, OpenAILLMConfig):
-                typer.echo(
-                    "Error: OpenAI LLM configuration is not of type OpenAILLMConfig.",
-                    err=True,
-                )
-                raise typer.Exit(code=1)
-
-            llm_provider_instance = OpenAIProvider(
-                api_key=openai_config.api_key,
-                model=openai_config.model,
-            )
-
-        elif llm_provider == "gemini":
-            gemini_config = config.llm.providers.get("gemini")
-            if not gemini_config:
-                typer.echo("Error: Gemini LLM configuration not found.", err=True)
-                raise typer.Exit(code=1)
-
-            # Ensure gemini_config is of the correct type
-            if not isinstance(gemini_config, GeminiLLMConfig):
-                typer.echo(
-                    "Error: Gemini LLM configuration is not of type GeminiLLMConfig.",
-                    err=True,
-                )
-                raise typer.Exit(code=1)
-
-            llm_provider_instance = GeminiProvider(
-                api_key=gemini_config.api_key,
-                model=gemini_config.model,
-            )
-        else:
-            typer.echo(f"Error: Unknown LLM provider '{llm_provider}'", err=True)
-            raise typer.Exit(code=1)
-
-        # Check if llm_provider_instance is still None before passing to LLMEngine
-        if llm_provider_instance is None:
-            typer.echo("Error: No LLM provider could be initialized.", err=True)
-            raise typer.Exit(code=1)
-
-        # Now llm_provider_instance is guaranteed to be one of the LLMProvider types
-        llm = LLMEngine(llm_provider_instance)
-
-        # Create analyzer and run analysis
-        analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm, config)
         result = analyzer.analyze_task_failure(dag_id, task_id, run_id, try_number)
 
         # Output results
@@ -211,10 +93,6 @@ def start(
 ):
     """Start continuous monitoring."""
     try:
-        # from dagnostics.core.config import load_config
-
-        # config = load_config(config_file)
-
         typer.echo(f"🔄 Starting DAGnostics monitor (interval: {interval}m)")
         # Implementation would go here
         typer.echo("Monitor started successfully!")
@@ -242,10 +120,6 @@ def report(
 ):
     """Generate analysis reports."""
     try:
-        # from dagnostics.core.config import load_config
-
-        # config = load_config(config_file)
-
         report_type = "daily" if daily else "summary"
         typer.echo(
             f"📊 Generating {report_type} report in {output_format.value} format..."
@@ -285,189 +159,155 @@ def notify_failures(
     """
     Analyze recent Airflow task failures and send concise SMS notifications.
     """
-    from dagnostics.core.config import load_config
-    from dagnostics.core.models import GeminiLLMConfig, OllamaLLMConfig, OpenAILLMConfig
-    from dagnostics.llm.engine import (
-        GeminiProvider,
-        LLMEngine,
-        LLMProvider,
-        OllamaProvider,
-        OpenAIProvider,
-    )
-    from dagnostics.llm.log_clusterer import LogClusterer
-    from dagnostics.monitoring.airflow_client import AirflowClient
-    from dagnostics.monitoring.analyzer import DAGAnalyzer
+    import re
 
-    config = load_config(config_file)
-
-    airflow_client = AirflowClient(
-        base_url=config.airflow.base_url,
-        username=config.airflow.username,
-        password=config.airflow.password,
-        db_connection=config.airflow.database_url,
-        verify_ssl=False,
-        db_timezone_offset=config.airflow.db_timezone_offset,
+    from dagnostics.cli.utils import (
+        get_error_message,
+        initialize_components_for_notifications,
     )
 
-    # Get the drain3 config path from the loaded configuration
-    drain3_config_file_path = config.drain3.config_path
-
-    # Use config-based baseline configuration
-    if config.monitoring.baseline_usage == "stored":
-        clusterer = LogClusterer(
-            persistence_path=config.drain3.persistence_path,
-            app_config=config,
-            config_path=drain3_config_file_path,  # Use the path from config
-        )
-    else:
-        clusterer = LogClusterer(
-            app_config=config,
-            config_path=drain3_config_file_path,  # Use the path from config
+    try:
+        config, analyzer = initialize_components_for_notifications(
+            config_file, llm_provider
         )
 
-    filter = FilterFactory.create_for_notifications(config)
-
-    # LLM provider selection (reuse logic from analyze)
-    llm_provider_instance: Union[
-        OllamaProvider, OpenAIProvider, GeminiProvider, LLMProvider, None
-    ] = None
-    if llm_provider == "ollama":
-        ollama_config = config.llm.providers.get("ollama")
-        if not ollama_config or not isinstance(ollama_config, OllamaLLMConfig):
-            typer.echo(
-                "Error: Ollama LLM configuration not found or invalid.", err=True
-            )
+        # Validate SMS configuration
+        if not config.alerts.sms.enabled:
+            typer.echo("Error: SMS alerts are not enabled in configuration.", err=True)
             raise typer.Exit(code=1)
-        llm_provider_instance = OllamaProvider(
-            base_url=ollama_config.base_url or "http://localhost:11434",
-            model=ollama_config.model,
-        )
-    elif llm_provider == "openai":
-        openai_config = config.llm.providers.get("openai")
-        if not openai_config or not isinstance(openai_config, OpenAILLMConfig):
+
+        if (
+            not config.alerts.sms.default_recipients
+            and not config.alerts.sms.task_recipients
+        ):
             typer.echo(
-                "Error: OpenAI LLM configuration not found or invalid.", err=True
-            )
-            raise typer.Exit(code=1)
-        llm_provider_instance = OpenAIProvider(
-            api_key=openai_config.api_key,
-            model=openai_config.model,
-        )
-    elif llm_provider == "gemini":
-        gemini_config = config.llm.providers.get("gemini")
-        if not gemini_config or not isinstance(gemini_config, GeminiLLMConfig):
-            typer.echo(
-                "Error: Gemini LLM configuration not found or invalid.", err=True
-            )
-            raise typer.Exit(code=1)
-        llm_provider_instance = GeminiProvider(
-            api_key=gemini_config.api_key,
-            model=gemini_config.model,
-        )
-    else:
-        typer.echo(f"Error: Unknown LLM provider '{llm_provider}'", err=True)
-        raise typer.Exit(code=1)
-    if llm_provider_instance is None:
-        typer.echo("Error: No LLM provider could be initialized.", err=True)
-        raise typer.Exit(code=1)
-    llm = LLMEngine(llm_provider_instance)
-    analyzer = DAGAnalyzer(airflow_client, clusterer, filter, llm, config)
-
-    # Validate SMS configuration
-    if not config.alerts.sms.enabled:
-        typer.echo("Error: SMS alerts are not enabled in configuration.", err=True)
-        raise typer.Exit(code=1)
-
-    if (
-        not config.alerts.sms.default_recipients
-        and not config.alerts.sms.task_recipients
-    ):
-        typer.echo(
-            "Error: No SMS recipients configured. Please add default_recipients or task_recipients to your config.",
-            err=True,
-        )
-        raise typer.Exit(code=1)
-
-    typer.echo(f"🔍 Fetching failed tasks from last {since_minutes} minutes...")
-    failed_tasks = airflow_client.get_failed_tasks(since_minutes)
-    if not failed_tasks:
-        typer.echo("No failed tasks found.")
-        return
-    typer.echo(f"Found {len(failed_tasks)} failed tasks.")
-
-    # Config-driven recipient mapping
-    def get_recipients_for_task(task):
-        import re
-
-        task_key = f"{task.dag_id}.{task.task_id}"
-
-        # Check task-specific recipients first
-        for pattern, recipients in config.alerts.sms.task_recipients.items():
-            if re.match(pattern, task_key):
-                return recipients
-
-        # Fall back to default recipients
-        return config.alerts.sms.default_recipients
-
-    for task in failed_tasks:
-        try:
-            # Get all tries for this task instance
-            typer.echo(
-                f"🔍 Fetching tries for {task.dag_id}.{task.task_id} (run: {task.run_id})..."
-            )
-            task_tries = airflow_client.get_task_tries(
-                task.dag_id, task.task_id, task.run_id
-            )
-
-            # Filter only failed tries
-            failed_tries = [
-                try_instance
-                for try_instance in task_tries
-                if try_instance.state == "failed" and try_instance.try_number > 0
-            ]
-
-            if not failed_tries:
-                typer.echo(
-                    f"⚠️  No failed tries found for {task.dag_id}.{task.task_id} (run: {task.run_id})"
-                )
-                continue
-
-            # Process each failed try
-            for failed_try in failed_tries:
-                try:
-                    typer.echo(
-                        f"📝 Analyzing {task.dag_id}.{task.task_id} (run: {task.run_id}, try: {failed_try.try_number})..."
-                    )
-
-                    summary = analyzer.extract_task_error_for_sms(
-                        failed_try.dag_id,
-                        failed_try.task_id,
-                        failed_try.run_id,
-                        failed_try.try_number,
-                    )
-
-                    recipients = get_recipients_for_task(failed_try)
-
-                    # Include try number in the summary for clarity
-                    enhanced_summary = f"{summary} Attempt: {failed_try.try_number}"
-
-                    if dry_run:
-                        typer.echo(
-                            f"[DRY RUN] Would send to {recipients}: {enhanced_summary}"
-                        )
-                    else:
-                        sms_config = config.alerts.sms.dict()
-                        send_sms_alert(enhanced_summary, recipients, sms_config)
-                        typer.echo(f"📱 Sent to {recipients}: {enhanced_summary}")
-
-                except Exception as e:
-                    typer.echo(
-                        f"❌ Error processing {task.dag_id}.{task.task_id} (try {failed_try.try_number}): {e}",
-                        err=True,
-                    )
-
-        except Exception as e:
-            typer.echo(
-                f"❌ Error fetching tries for {task.dag_id}.{task.task_id} (run: {task.run_id}): {e}",
+                "Error: No SMS recipients configured. Please add default_recipients or task_recipients to your config.",
                 err=True,
             )
+            raise typer.Exit(code=1)
+
+        typer.echo(f"🔍 Fetching failed tasks from last {since_minutes} minutes...")
+        failed_tasks = analyzer.airflow_client.get_failed_tasks(since_minutes)
+
+        if not failed_tasks:
+            typer.echo("No failed tasks found.")
+            return
+
+        typer.echo(f"Found {len(failed_tasks)} failed tasks.")
+
+        # Config-driven recipient mapping
+        def get_recipients_for_task(task):
+            task_key = f"{task.dag_id}.{task.task_id}"
+
+            # Check task-specific recipients first
+            for pattern, recipients in config.alerts.sms.task_recipients.items():
+                if re.match(pattern, task_key):
+                    return recipients
+
+            # Fall back to default recipients
+            return config.alerts.sms.default_recipients
+
+        for task in failed_tasks:
+            try:
+                # Get all tries for this task instance
+                typer.echo(
+                    f"🔍 Fetching tries for {task.dag_id}.{task.task_id} (run: {task.run_id})..."
+                )
+                task_tries = analyzer.airflow_client.get_task_tries(
+                    task.dag_id, task.task_id, task.run_id
+                )
+
+                # Filter only failed tries
+                failed_tries = [
+                    try_instance
+                    for try_instance in task_tries
+                    if try_instance.state == "failed" and try_instance.try_number > 0
+                ]
+
+                if not failed_tries:
+                    typer.echo(
+                        f"⚠️  No failed tries found for {task.dag_id}.{task.task_id} (run: {task.run_id})"
+                    )
+                    continue
+
+                # Process each failed try
+                for failed_try in failed_tries:
+                    try:
+                        typer.echo(
+                            f"📝 Analyzing {task.dag_id}.{task.task_id} (run: {task.run_id}, try: {failed_try.try_number})..."
+                        )
+
+                        summary = get_error_message(
+                            failed_try.dag_id,
+                            failed_try.task_id,
+                            failed_try.run_id,
+                            failed_try.try_number,
+                            config_file,
+                            llm_provider,
+                        )
+
+                        recipients = get_recipients_for_task(failed_try)
+
+                        # Include try number in the summary for clarity
+                        enhanced_summary = f"{summary} Attempt: {failed_try.try_number}"
+
+                        if dry_run:
+                            typer.echo(
+                                f"[DRY RUN] Would send to {recipients}: {enhanced_summary}"
+                            )
+                        else:
+                            sms_config = config.alerts.sms.dict()
+                            send_sms_alert(enhanced_summary, recipients, sms_config)
+                            typer.echo(f"📱 Sent to {recipients}: {enhanced_summary}")
+
+                    except Exception as e:
+                        typer.echo(
+                            f"❌ Error processing {task.dag_id}.{task.task_id} (try {failed_try.try_number}): {e}",
+                            err=True,
+                        )
+
+            except Exception as e:
+                typer.echo(
+                    f"❌ Error fetching tries for {task.dag_id}.{task.task_id} (run: {task.run_id}): {e}",
+                    err=True,
+                )
+
+    except Exception as e:
+        typer.echo(f"Notification failed: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+def get_error(
+    dag_id: str = Argument(..., help="ID of the DAG to analyze"),
+    task_id: str = Argument(..., help="ID of the task to analyze"),
+    run_id: str = Argument(..., help="Run ID of the task instance"),
+    try_number: int = Argument(..., help="Attempt number of the task to analyze"),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
+) -> str:
+    """Get the exact error message for a specific task failure."""
+    from dagnostics.cli.utils import get_error_message
+
+    try:
+        error_message = get_error_message(
+            dag_id, task_id, run_id, try_number, config_file, llm_provider
+        )
+
+        # Print when used as CLI command
+        typer.echo(error_message)
+        return error_message
+
+    except Exception as e:
+        error_msg = f"Error extraction failed: {e}"
+        typer.echo(error_msg, err=True)
+        return error_msg
