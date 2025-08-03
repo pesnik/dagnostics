@@ -9,14 +9,18 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 - Airflow integration for log collection
 - Web dashboard UI for monitoring (backend API may be incomplete)
 - CLI for analysis and monitoring commands
+- Alerting (email/SMS)
 
 **Planned / Not Yet Implemented:**
 
 - Report generation and export (HTML, JSON, etc.)
 - Monitoring daemon (background process)
-- Alerting (email/SMS)
 - Full integration with existing ETL monitoring systems
 
+---
+
+## System Architecture
+![System Architecture](docs/system_architecture.png)
 ---
 
 ## 🛠 Tech Stack
