@@ -6,13 +6,13 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from dagnostics.analysis.analyzer import DAGAnalyzer
 from dagnostics.core.models import (
     AnthropicLLMConfig,
     AppConfig,
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
-from dagnostics.monitoring.analyzer import DAGAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +75,12 @@ class DailySummary(BaseModel):
 # Dependency injection
 def get_analyzer():
     """Get configured DAGAnalyzer instance"""
+    from dagnostics.analysis.analyzer import DAGAnalyzer
+    from dagnostics.clustering.log_clusterer import LogClusterer
     from dagnostics.core.config import load_config
+    from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
     from dagnostics.llm.engine import LLMEngine, OllamaProvider
-    from dagnostics.llm.log_clusterer import LogClusterer
-    from dagnostics.llm.pattern_filter import ErrorPatternFilter
     from dagnostics.monitoring.airflow_client import AirflowClient
-    from dagnostics.monitoring.analyzer import DAGAnalyzer
 
     config: AppConfig = load_config()
 
@@ -93,7 +93,9 @@ def get_analyzer():
     )
 
     # Accessing drain3.persistence_path directly via dot notation
-    clusterer = LogClusterer(persistence_path=config.drain3.persistence_path)
+    clusterer = LogClusterer(
+        persistence_path=config.drain3.persistence_path, app_config=config
+    )
 
     # If ErrorPatternFilter takes config_path from AppConfig:
     # filter = ErrorPatternFilter(config_path=config.pattern_filtering.config_path)

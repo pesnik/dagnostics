@@ -7,7 +7,7 @@ from datetime import datetime
 
 from dagnostics.core.config import load_config
 from dagnostics.core.models import LogEntry
-from dagnostics.llm.filter_integration import get_enhanced_filter
+from dagnostics.heuristics.filter_integration import get_enhanced_filter
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 

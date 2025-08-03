@@ -374,6 +374,7 @@ class ErrorPatternFilter:
         logger.info(
             f"Filtered {len(anomalous_logs)} logs down to {len(filtered_logs)} candidates"
         )
+        logger.info("\n".join([log.message for log in filtered_logs]))
         return filtered_logs
 
     def _is_error_candidate(self, log_entry: LogEntry) -> bool:

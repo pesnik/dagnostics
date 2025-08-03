@@ -6,6 +6,8 @@ from typing import Optional, Tuple, Union
 
 import typer
 
+from dagnostics.analysis.analyzer import DAGAnalyzer
+from dagnostics.clustering.log_clusterer import LogClusterer
 from dagnostics.core.config import load_config
 from dagnostics.core.models import (
     AppConfig,
@@ -13,6 +15,7 @@ from dagnostics.core.models import (
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
+from dagnostics.heuristics.filter_factory import FilterFactory
 from dagnostics.llm.engine import (
     GeminiProvider,
     LLMEngine,
@@ -20,10 +23,7 @@ from dagnostics.llm.engine import (
     OllamaProvider,
     OpenAIProvider,
 )
-from dagnostics.llm.filter_factory import FilterFactory
-from dagnostics.llm.log_clusterer import LogClusterer
 from dagnostics.monitoring.airflow_client import AirflowClient
-from dagnostics.monitoring.analyzer import DAGAnalyzer
 
 
 def initialize_components(

@@ -6,7 +6,7 @@ Centralizes filter creation logic for different use cases.
 import logging
 
 from dagnostics.core.models import AppConfig, LogEntry
-from dagnostics.llm.pattern_filter import ErrorPatternFilter
+from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class FilterFactory:
         filter_instance: ErrorPatternFilter, config: AppConfig
     ):
         """Add runtime filters specific to notification context"""
-        from dagnostics.llm.pattern_filter import FilterRuleType
+        from dagnostics.heuristics.pattern_filter import FilterRuleType
 
         # More aggressive filtering for notifications to reduce noise
         if config.api.log_level.upper() != "DEBUG":

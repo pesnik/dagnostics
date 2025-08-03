@@ -3,7 +3,7 @@ from typing import Optional
 
 from dagnostics.core.config import load_config
 from dagnostics.core.models import AppConfig, LogEntry
-from dagnostics.llm.pattern_filter import ErrorPatternFilter, FilterRuleType
+from dagnostics.heuristics.pattern_filter import ErrorPatternFilter, FilterRuleType
 
 logger = logging.getLogger(__name__)
 

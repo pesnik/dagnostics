@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, Union, cast  # Import necessary ty
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from dagnostics.analysis.analyzer import DAGAnalyzer
 from dagnostics.core.models import AnalysisResult, ErrorSeverity, TaskInstance
-from dagnostics.monitoring.analyzer import DAGAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,7 @@ class DAGMonitor:
             task_instance.dag_id,
             task_instance.task_id,
             task_instance.run_id,
+            task_instance.try_number,
         )
 
         return result
