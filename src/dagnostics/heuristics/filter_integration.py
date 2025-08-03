@@ -1,9 +1,15 @@
+"""
+Integrated filter that connects heuristic filtering with application configuration.
+Provides seamless integration between the heuristics module and the main application.
+"""
+
 import logging
 from typing import Optional
 
 from dagnostics.core.config import load_config
 from dagnostics.core.models import AppConfig, LogEntry
-from dagnostics.heuristics.pattern_filter import ErrorPatternFilter, FilterRuleType
+from dagnostics.heuristics.engines import FilterRuleType
+from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +46,7 @@ class IntegratedErrorPatternFilter(ErrorPatternFilter):
         if not self.app_config:
             return
 
-        # Type check to satisfy Pylance
+        # Type check to satisfy type checker
         app_config = self.app_config
         if app_config is None:
             return
@@ -124,7 +130,7 @@ class IntegratedErrorPatternFilter(ErrorPatternFilter):
         if not self.app_config:
             return
 
-        # Type check to satisfy Pylance
+        # Type check to satisfy type checker
         app_config = self.app_config
         if app_config is None:
             return
@@ -154,6 +160,42 @@ class IntegratedErrorPatternFilter(ErrorPatternFilter):
                 "Debug messages (API not in debug mode)",
             )
 
+        # Add application-specific noise filters
+        self.add_filter_rule(
+            "Health check passed",
+            FilterRuleType.SUBSTRING,
+            "Health check success messages",
+        )
+
+        self.add_filter_rule(
+            "Heartbeat",
+            FilterRuleType.SUBSTRING,
+            "Heartbeat messages",
+        )
+
+    def refresh_config(self, new_app_config: AppConfig):
+        """Refresh the filter with new application configuration"""
+        old_rule_count = len(self.filter_rules)
+
+        # Update app config
+        self.app_config = new_app_config
+
+        # Clear existing app-specific rules (keep base rules)
+        # This is a simplified approach - in production you might want more granular control
+        self.filter_rules = [
+            rule
+            for rule in self.filter_rules
+            if rule.rule_type != FilterRuleType.CUSTOM_FUNCTION
+        ]
+
+        # Re-register app-specific functions
+        self._register_app_specific_functions()
+        self.add_runtime_filters_from_config()
+
+        logger.info(
+            f"Refreshed filter config: {old_rule_count} -> {len(self.filter_rules)} rules"
+        )
+
     @classmethod
     def from_app_config(
         cls, config_path: str = "config/config.yaml"
@@ -169,6 +211,28 @@ class IntegratedErrorPatternFilter(ErrorPatternFilter):
         """
         app_config = load_config(config_path)
         return cls(app_config)
+
+    def get_integration_stats(self) -> dict:
+        """Get statistics about the integration with app config"""
+        stats = {
+            "has_app_config": self.app_config is not None,
+            "total_rules": len(self.filter_rules),
+            "engine_stats": self.get_engine_stats(),
+            "filter_stats": self.get_filter_stats(),
+        }
+
+        if self.app_config:
+            stats.update(
+                {
+                    "airflow_url": self.app_config.airflow.base_url,
+                    "llm_provider": self.app_config.llm.default_provider,
+                    "sms_enabled": self.app_config.alerts.sms.enabled,
+                    "email_enabled": self.app_config.alerts.email.enabled,
+                    "log_level": self.app_config.api.log_level,
+                }
+            )
+
+        return stats
 
 
 def create_filter_for_notify_failures(
