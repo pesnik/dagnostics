@@ -53,8 +53,8 @@ class LogClusterer:
 
         # Ingest all successful logs into baseline
         for log_entry in successful_logs:
-            result = baseline_drain.add_log_message(log_entry.message)
-            print(result)
+            _ = baseline_drain.add_log_message(log_entry.message)
+            # print(result)
 
         # Update baseline timestamp
         self.baseline_timestamps[baseline_key] = datetime.now()

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from dagnostics.clustering.log_clusterer import LogClusterer
 from dagnostics.core.models import (
@@ -129,7 +129,7 @@ class DAGAnalyzer:
 
     def extract_task_error_for_sms(
         self, dag_id: str, task_id: str, run_id: str, try_number: int
-    ) -> str:
+    ) -> tuple[str, Optional[List[LogEntry]], str]:
         """Extract error line for SMS notifications using Drain3 clustering and LLM analysis"""
         try:
             # Use core analysis logic
@@ -138,17 +138,25 @@ class DAGAnalyzer:
             )
 
             if not error_candidates:
-                return f"{dag_id}.{task_id}: No error patterns identified"
+                return (
+                    f"{dag_id}.{task_id}: No error patterns identified",
+                    error_candidates,
+                    "",
+                )
 
             error_line = self.llm.extract_error_line(error_candidates)
 
-            return f"DAG: {dag_id} Task: {task_id}: {error_line}"
+            return (
+                f"DAG: {dag_id} Task: {task_id}: {error_line}",
+                error_candidates,
+                error_line,
+            )
 
         except Exception as e:
             logger.error(
                 f"Error extraction failed for {dag_id}.{task_id}.{run_id}: {e}"
             )
-            return f"{dag_id}.{task_id}: Analysis failed - {str(e)}"
+            return f"{dag_id}.{task_id}: Analysis failed - {str(e)}", None, ""
 
     def _ensure_baseline(self, dag_id: str, task_id: str) -> BaselineComparison:
         """Ensure baseline exists for the given dag/task based on configuration"""

@@ -171,7 +171,7 @@ def get_error_message(
     """
     try:
         _, analyzer = initialize_components(config_file, llm_provider)
-        error_message = analyzer.extract_task_error_for_sms(
+        error_message, _, _ = analyzer.extract_task_error_for_sms(
             dag_id, task_id, run_id, try_number
         )
         return error_message
