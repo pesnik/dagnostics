@@ -73,7 +73,7 @@ class DatasetGenerator:
             except Exception as e:
                 print(e)
 
-        with open("training_data.jsonl", "w") as f:
+        with open("data/training_data.jsonl", "w") as f:
             for train_data in training_data:
                 json.dump(train_data, f)
                 f.write("\n")
@@ -114,7 +114,7 @@ def main(
     _, analyzer = initialize_components_for_notifications(config_file, llm_provider)
 
     generator = DatasetGenerator()
-    failed_tasks = generator.get_failed_tasks(analyzer, 1)
+    failed_tasks = generator.get_failed_tasks(analyzer, 15)
     generator.generate_dataset(analyzer, failed_tasks)
 
 
