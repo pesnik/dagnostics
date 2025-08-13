@@ -7,6 +7,7 @@ from typer import Argument, Option
 
 from dagnostics.cli.utils import initialize_components
 from dagnostics.core.models import AnalysisResult, OutputFormat, ReportFormat
+from dagnostics.daemon.service import DaemonService
 from dagnostics.utils.sms import send_sms_alert
 
 
@@ -90,12 +91,41 @@ def start(
         help="Path to configuration file (default: searches standard locations)",
     ),
     daemon: bool = Option(False, "--daemon", help="Run as daemon"),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
 ):
     """Start continuous monitoring."""
     try:
-        typer.echo(f"🔄 Starting DAGnostics monitor (interval: {interval}m)")
-        # Implementation would go here
-        typer.echo("Monitor started successfully!")
+        service = DaemonService(config_file, llm_provider)
+
+        if daemon:
+            # Check if already running
+            if service.is_daemon_running():
+                typer.echo("❌ Daemon is already running", err=True)
+                typer.echo(
+                    "💡 Use 'dagnostics status' to check status or 'dagnostics stop' to stop it first."
+                )
+                raise typer.Exit(code=1)
+
+            typer.echo(f"🔄 Starting DAGnostics daemon (interval: {interval}m)")
+            if service.start(interval, detach=True):
+                typer.echo("✅ Daemon started successfully!")
+            else:
+                typer.echo("❌ Failed to start daemon", err=True)
+                raise typer.Exit(code=1)
+        else:
+            # Run in foreground
+            typer.echo(f"🔄 Starting DAGnostics monitor (interval: {interval}m)")
+            typer.echo("Press Ctrl+C to stop")
+            try:
+                service.start(interval, detach=False)
+            except KeyboardInterrupt:
+                typer.echo("\n⏹ Stopping monitor...")
+                service.stop()
 
     except FileNotFoundError as e:
         typer.echo(f"❌ Configuration error: {e}", err=True)
@@ -237,7 +267,7 @@ def notify_failures(
                             f"📝 Analyzing {task.dag_id}.{task.task_id} (run: {task.run_id}, try: {failed_try.try_number})..."
                         )
 
-                        summary = get_error_message(
+                        summary, _, _ = get_error_message(
                             failed_try.dag_id,
                             failed_try.task_id,
                             failed_try.run_id,
@@ -274,6 +304,114 @@ def notify_failures(
 
     except Exception as e:
         typer.echo(f"Notification failed: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+def stop(
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
+):
+    """Stop the daemon service."""
+    try:
+        service = DaemonService(config_file, llm_provider)
+
+        if not service.is_daemon_running():
+            typer.echo("❌ Daemon is not running")
+            raise typer.Exit(code=1)
+
+        typer.echo("⏹ Stopping DAGnostics daemon...")
+        if service.stop():
+            typer.echo("✅ Daemon stopped successfully!")
+        else:
+            typer.echo("❌ Failed to stop daemon", err=True)
+            raise typer.Exit(code=1)
+
+    except Exception as e:
+        typer.echo(f"Stop failed: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+def status(
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
+    verbose: bool = Option(False, "--verbose", "-v", help="Show detailed status"),
+):
+    """Show daemon status."""
+    try:
+        service = DaemonService(config_file, llm_provider)
+        status_data = service.get_status()
+
+        # Display basic status
+        status_msg = status_data.get("status", "unknown")
+        if status_msg == "running":
+            typer.echo("✅ DAGnostics daemon is running")
+        elif status_msg == "stopped":
+            typer.echo("⏹ DAGnostics daemon is stopped")
+        elif status_msg == "error":
+            typer.echo("❌ DAGnostics daemon has errors")
+        else:
+            typer.echo(f"❓ DAGnostics daemon status: {status_msg}")
+
+        if verbose:
+            typer.echo("\n📋 Detailed Status:")
+            typer.echo("-" * 30)
+            for key, value in status_data.items():
+                if key != "status":
+                    typer.echo(f"{key}: {value}")
+
+    except Exception as e:
+        typer.echo(f"Status check failed: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+def restart(
+    interval: int = Option(5, "--interval", "-i", help="Check interval in minutes"),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
+):
+    """Restart the daemon service."""
+    try:
+        service = DaemonService(config_file, llm_provider)
+
+        typer.echo("🔄 Restarting DAGnostics daemon...")
+        if service.restart(interval):
+            typer.echo("✅ Daemon restarted successfully!")
+        else:
+            typer.echo("❌ Failed to restart daemon", err=True)
+            raise typer.Exit(code=1)
+
+    except Exception as e:
+        typer.echo(f"Restart failed: {e}", err=True)
         raise typer.Exit(code=1)
 
 

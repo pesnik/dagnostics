@@ -78,10 +78,10 @@ def get_analyzer():
     """Get configured DAGAnalyzer instance"""
     from dagnostics.analysis.analyzer import DAGAnalyzer
     from dagnostics.clustering.log_clusterer import LogClusterer
+    from dagnostics.core.airflow_client import AirflowClient
     from dagnostics.core.config import load_config
     from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
     from dagnostics.llm.engine import LLMEngine, OllamaProvider
-    from dagnostics.monitoring.airflow_client import AirflowClient
 
     config: AppConfig = load_config()
 

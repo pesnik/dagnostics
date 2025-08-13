@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from dagnostics.clustering.log_clusterer import LogClusterer
+from dagnostics.core.airflow_client import AirflowClient
 from dagnostics.core.models import (
     AnalysisResult,
     BaselineComparison,
@@ -14,7 +15,6 @@ from dagnostics.core.models import (
 )
 from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
 from dagnostics.llm.engine import LLMEngine
-from dagnostics.monitoring.airflow_client import AirflowClient
 
 logger = logging.getLogger(__name__)
 

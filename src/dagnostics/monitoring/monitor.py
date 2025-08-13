@@ -96,21 +96,22 @@ class DAGMonitor:
             analysis_results = []
             for task in failed_tasks:
                 try:
-                    result = await self.process_failure(task)
-                    self.stats["processed_today"] = (
-                        cast(int, self.stats["processed_today"]) + 1
-                    )
-                    if result.processing_time is not None:
-                        self.stats["total_processing_time"] = (
-                            cast(float, self.stats["total_processing_time"])
-                            + result.processing_time
+                    results = await self.process_failure(task)
+                    for result in results:
+                        self.stats["processed_today"] = (
+                            cast(int, self.stats["processed_today"]) + 1
                         )
-                    else:
-                        logger.warning(
-                            f"Processing time for {result.id} is None, skipping addition to total."
-                        )
+                        if result.processing_time is not None:
+                            self.stats["total_processing_time"] = (
+                                cast(float, self.stats["total_processing_time"])
+                                + result.processing_time
+                            )
+                        else:
+                            logger.warning(
+                                f"Processing time for {result.id} is None, skipping addition to total."
+                            )
 
-                    analysis_results.append(result)
+                        analysis_results.append(result)
 
                 except Exception as e:
                     logger.error(f"Failed to process {task.dag_id}.{task.task_id}: {e}")
@@ -124,24 +125,65 @@ class DAGMonitor:
         except Exception as e:
             logger.error(f"Monitor check failed: {e}")
 
-    async def process_failure(self, task_instance: TaskInstance) -> AnalysisResult:
-        """Process a single task failure"""
+    async def process_failure(
+        self, task_instance: TaskInstance
+    ) -> List[AnalysisResult]:
+        """Process a single task failure, handling multiple failed tries"""
         logger.info(
             f"Processing failure: {task_instance.dag_id}.{task_instance.task_id}"
         )
 
-        # Run analysis in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            self.analyzer.analyze_task_failure,
-            task_instance.dag_id,
-            task_instance.task_id,
-            task_instance.run_id,
-            task_instance.try_number,
-        )
+        try:
+            # Get all tries for this task instance
+            task_tries = self.analyzer.airflow_client.get_task_tries(
+                task_instance.dag_id, task_instance.task_id, task_instance.run_id
+            )
 
-        return result
+            # Filter only failed tries
+            failed_tries = [
+                try_instance
+                for try_instance in task_tries
+                if try_instance.state == "failed" and try_instance.try_number > 0
+            ]
+
+            if not failed_tries:
+                logger.warning(
+                    f"No failed tries found for {task_instance.dag_id}.{task_instance.task_id} (run: {task_instance.run_id})"
+                )
+                return []
+
+            # Process each failed try
+            results = []
+            for failed_try in failed_tries:
+                try:
+                    logger.info(
+                        f"Analyzing {task_instance.dag_id}.{task_instance.task_id} (run: {task_instance.run_id}, try: {failed_try.try_number})"
+                    )
+
+                    # Run analysis in thread pool to avoid blocking
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(
+                        None,
+                        self.analyzer.analyze_task_failure,
+                        failed_try.dag_id,
+                        failed_try.task_id,
+                        failed_try.run_id,
+                        failed_try.try_number,
+                    )
+                    results.append(result)
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to analyze {task_instance.dag_id}.{task_instance.task_id} (try {failed_try.try_number}): {e}"
+                    )
+
+            return results
+
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch tries for {task_instance.dag_id}.{task_instance.task_id} (run: {task_instance.run_id}): {e}"
+            )
+            return []
 
     async def send_alerts(self, results: List[AnalysisResult]):
         """Send alerts for critical failures"""

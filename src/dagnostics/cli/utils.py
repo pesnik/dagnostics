@@ -8,6 +8,7 @@ import typer
 
 from dagnostics.analysis.analyzer import DAGAnalyzer
 from dagnostics.clustering.log_clusterer import LogClusterer
+from dagnostics.core.airflow_client import AirflowClient
 from dagnostics.core.config import load_config
 from dagnostics.core.models import (
     AppConfig,
@@ -24,7 +25,6 @@ from dagnostics.llm.engine import (
     OllamaProvider,
     OpenAIProvider,
 )
-from dagnostics.monitoring.airflow_client import AirflowClient
 
 
 def initialize_components(
