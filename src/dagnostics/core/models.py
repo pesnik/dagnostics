@@ -256,6 +256,16 @@ class WebConfig(BaseModel):
     debug: bool
 
 
+class FewShotExample(BaseModel):
+    log_context: str
+    extracted_response: str
+
+
+class PromptsConfig(BaseModel):
+    few_shot_examples: Dict[str, List[FewShotExample]] = Field(default_factory=dict)
+    templates: Dict[str, str] = Field(default_factory=dict)
+
+
 class AppConfig(BaseModel):
     """Main application configuration structure."""
 
@@ -270,3 +280,4 @@ class AppConfig(BaseModel):
     database: DatabaseConfig
     api: APIConfig
     web: WebConfig
+    prompts: Optional[PromptsConfig] = None

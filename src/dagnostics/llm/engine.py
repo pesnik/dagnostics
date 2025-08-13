@@ -7,7 +7,13 @@ from typing import List, Optional, Union
 import requests
 from pydantic import HttpUrl
 
-from dagnostics.core.models import ErrorAnalysis, ErrorCategory, ErrorSeverity, LogEntry
+from dagnostics.core.models import (
+    AppConfig,
+    ErrorAnalysis,
+    ErrorCategory,
+    ErrorSeverity,
+    LogEntry,
+)
 from dagnostics.llm.prompts import (
     get_categorization_prompt,
     get_error_extraction_prompt,
@@ -221,8 +227,9 @@ class AnthropicProvider(LLMProvider):
 class LLMEngine:
     """Provider-agnostic LLM interface for error analysis"""
 
-    def __init__(self, provider: LLMProvider):
+    def __init__(self, provider: LLMProvider, config: Optional[AppConfig] = None):
         self.provider = provider
+        self.config = config
 
     def extract_error_message(self, log_entries: List[LogEntry]) -> ErrorAnalysis:
         """Extract and analyze error from log entries"""
@@ -251,6 +258,7 @@ class LLMEngine:
             dag_id=log_entries[0].dag_id if log_entries else "unknown",
             task_id=log_entries[0].task_id if log_entries else "unknown",
             provider_type=provider_type,
+            config=self.config,
         )
 
         try:
@@ -304,6 +312,7 @@ class LLMEngine:
             dag_id=log_entries[0].dag_id if log_entries else "unknown",
             task_id=log_entries[0].task_id if log_entries else "unknown",
             provider_type=provider_type,
+            config=self.config,
         )
 
         try:
@@ -367,7 +376,9 @@ class LLMEngine:
     def categorize_error(self, error_message: str, context: str = "") -> ErrorCategory:
         """Categorize error into predefined categories"""
 
-        prompt = get_categorization_prompt(error_message=error_message, context=context)
+        prompt = get_categorization_prompt(
+            error_message=error_message, context=context, config=self.config
+        )
 
         try:
             response = self.provider.generate_response(prompt, temperature=0.0)
@@ -383,6 +394,7 @@ class LLMEngine:
             error_message=error_analysis.error_message,
             category=error_analysis.category.value,
             severity=error_analysis.severity.value,
+            config=self.config,
         )
 
         try:

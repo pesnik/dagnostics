@@ -7,6 +7,8 @@ Prompts are designed to be provider-agnostic and can be customized as needed.
 
 from typing import Optional
 
+from dagnostics.core.models import AppConfig, FewShotExample
+
 # Error extraction prompt for full analysis
 ERROR_EXTRACTION_PROMPT = """
 You are an expert ETL engineer analyzing Airflow task failure logs. Your job is to identify the root cause error from noisy log data.
@@ -109,22 +111,38 @@ PROVIDER_MODIFICATIONS = {
 }
 
 
-def get_prompt(prompt_name: str, provider_type: Optional[str] = None, **kwargs) -> str:
+def get_prompt(
+    prompt_name: str,
+    provider_type: Optional[str] = None,
+    config: Optional[AppConfig] = None,
+    **kwargs,
+) -> str:
     """
-    Get a prompt template with optional provider-specific modifications.
+    Get a prompt template with optional provider-specific modifications and config overrides.
 
     Args:
         prompt_name: Name of the prompt template
         provider_type: Type of LLM provider (e.g., 'gemini', 'openai')
+        config: App configuration with prompt overrides
         **kwargs: Variables to format the prompt template
 
     Returns:
         Formatted prompt string
     """
-    if prompt_name not in PROMPT_TEMPLATES:
-        raise ValueError(f"Unknown prompt template: {prompt_name}")
+    # First check for config-based template override
+    if config and config.prompts and prompt_name in config.prompts.templates:
+        prompt = config.prompts.templates[prompt_name]
+    else:
+        # Fallback to default templates
+        if prompt_name not in PROMPT_TEMPLATES:
+            raise ValueError(f"Unknown prompt template: {prompt_name}")
+        prompt = PROMPT_TEMPLATES[prompt_name]
 
-    prompt = PROMPT_TEMPLATES[prompt_name]
+    # Add few-shot examples if available
+    if config and config.prompts and prompt_name in config.prompts.few_shot_examples:
+        examples = config.prompts.few_shot_examples[prompt_name]
+        few_shot_text = _format_few_shot_examples(examples)
+        kwargs["few_shot_examples"] = few_shot_text
 
     # Add provider-specific modifications
     if provider_type and provider_type in PROVIDER_MODIFICATIONS:
@@ -136,29 +154,42 @@ def get_prompt(prompt_name: str, provider_type: Optional[str] = None, **kwargs) 
 
 
 def get_error_extraction_prompt(
-    log_context: str, dag_id: str, task_id: str, provider_type: Optional[str] = None
+    log_context: str,
+    dag_id: str,
+    task_id: str,
+    provider_type: Optional[str] = None,
+    config: Optional[AppConfig] = None,
 ) -> str:
     """Get the error extraction prompt for full analysis."""
     return get_prompt(
         "error_extraction",
         provider_type=provider_type,
+        config=config,
         log_context=log_context,
         dag_id=dag_id,
         task_id=task_id,
     )
 
 
-def get_categorization_prompt(error_message: str, context: str = "") -> str:
+def get_categorization_prompt(
+    error_message: str, context: str = "", config: Optional[AppConfig] = None
+) -> str:
     """Get the error categorization prompt."""
     return get_prompt(
-        "error_categorization", error_message=error_message, context=context
+        "error_categorization",
+        config=config,
+        error_message=error_message,
+        context=context,
     )
 
 
-def get_resolution_prompt(error_message: str, category: str, severity: str) -> str:
+def get_resolution_prompt(
+    error_message: str, category: str, severity: str, config: Optional[AppConfig] = None
+) -> str:
     """Get the resolution suggestion prompt."""
     return get_prompt(
         "resolution_suggestion",
+        config=config,
         error_message=error_message,
         category=category,
         severity=severity,
@@ -166,13 +197,32 @@ def get_resolution_prompt(error_message: str, category: str, severity: str) -> s
 
 
 def get_sms_error_prompt(
-    log_context: str, dag_id: str, task_id: str, provider_type: Optional[str] = None
+    log_context: str,
+    dag_id: str,
+    task_id: str,
+    provider_type: Optional[str] = None,
+    config: Optional[AppConfig] = None,
 ) -> str:
     """Get the SMS error extraction prompt for lightweight LLM analysis."""
     return get_prompt(
         "sms_error_extraction",
         provider_type=provider_type,
+        config=config,
         log_context=log_context,
         dag_id=dag_id,
         task_id=task_id,
     )
+
+
+def _format_few_shot_examples(examples: list[FewShotExample]) -> str:
+    """Format few-shot examples for inclusion in prompts."""
+    formatted_examples = []
+
+    for i, example in enumerate(examples[:5], 1):  # Limit to 5 examples max
+        formatted_examples.append(
+            f"Example {i}:\n"
+            f"Log Context:\n{example.log_context}\n\n"
+            f"Expected Response:\n{example.extracted_response}\n"
+        )
+
+    return "\n" + "\n---\n".join(formatted_examples) + "\n---\n"

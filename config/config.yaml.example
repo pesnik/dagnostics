@@ -67,20 +67,9 @@ alerts:
       api_key: "${SMS_GATEWAY_API_KEY}"
     param_mapping:
       recipient: "to"
-      message: "msg"
-    # Recipient configuration
+      message: "text"
     default_recipients:
-      - "+1234567890"  # Default phone number for all tasks
-      - "+0987654321"  # Additional default recipient
-    # Task-specific recipients (optional)
-    task_recipients:
-      "etl_pipeline.*":  # All tasks in etl_pipeline DAGs
-        - "+1111111111"
-        - "+2222222222"
-      ".*critical.*":    # Any task with "critical" in the name
-        - "+3333333333"
-      "data_ingestion.*":
-        - "+4444444444"
+      - "+88019********"
   email:
     enabled: true
     smtp_server: "smtp.gmail.com"
@@ -113,3 +102,143 @@ web:
   host: "0.0.0.0"
   port: 8080
   debug: false
+
+prompts:
+  # Few-shot examples for better error extraction
+  few_shot_examples:
+    error_extraction:
+      - log_context: |
+          [2025-08-13 10:15:23] INFO: Starting task execution
+          [2025-08-13 10:15:24] INFO: Connecting to database
+          [2025-08-13 10:15:25] ERROR: psycopg2.OperationalError: FATAL: database "analytics_db" does not exist
+          [2025-08-13 10:15:25] ERROR: Task failed with exception
+        extracted_response: |
+          {
+            "error_message": "psycopg2.OperationalError: FATAL: database \"analytics_db\" does not exist",
+            "confidence": 0.95,
+            "category": "configuration_error",
+            "severity": "high",
+            "reasoning": "Database connection error due to missing database, clear configuration issue",
+            "error_lines": ["psycopg2.OperationalError: FATAL: database \"analytics_db\" does not exist"]
+          }
+
+      - log_context: |
+          [2025-08-13 14:22:10] INFO: Processing data file
+          [2025-08-13 14:22:11] INFO: Reading CSV file: /data/sales_2025.csv
+          [2025-08-13 14:22:12] ERROR: pandas.errors.EmptyDataError: No columns to parse from file
+          [2025-08-13 14:22:12] ERROR: Task execution failed
+        extracted_response: |
+          {
+            "error_message": "pandas.errors.EmptyDataError: No columns to parse from file",
+            "confidence": 0.90,
+            "category": "data_quality",
+            "severity": "medium",
+            "reasoning": "Empty or malformed CSV file causing parsing failure",
+            "error_lines": ["pandas.errors.EmptyDataError: No columns to parse from file"]
+          }
+
+      - log_context: |
+          [2025-08-13 09:45:15] INFO: Starting data extraction
+          [2025-08-13 09:45:16] INFO: Waiting for upstream task completion
+          [2025-08-13 09:50:17] ERROR: Upstream task 'data_validation' failed
+          [2025-08-13 09:50:17] ERROR: AirflowSkipException: Task skipped due to upstream failure
+        extracted_response: |
+          {
+            "error_message": "AirflowSkipException: Task skipped due to upstream failure",
+            "confidence": 0.85,
+            "category": "dependency_failure",
+            "severity": "medium",
+            "reasoning": "Task failed because upstream dependency failed, not an issue with this task itself",
+            "error_lines": ["Upstream task 'data_validation' failed", "AirflowSkipException: Task skipped due to upstream failure"]
+          }
+
+      - log_context: |
+          [2025-08-13 11:30:45] INFO: Executing SQL query
+          [2025-08-13 11:30:46] INFO: Query execution started
+          [2025-08-13 11:35:46] ERROR: sqlalchemy.exc.OperationalError: (psycopg2.errors.QueryCanceled) canceling statement due to statement timeout
+          [2025-08-13 11:35:46] ERROR: Query execution failed after 5 minutes
+        extracted_response: |
+          {
+            "error_message": "sqlalchemy.exc.OperationalError: (psycopg2.errors.QueryCanceled) canceling statement due to statement timeout",
+            "confidence": 0.92,
+            "category": "timeout_error",
+            "severity": "medium",
+            "reasoning": "Query timed out after 5 minutes, indicating performance issue or resource contention",
+            "error_lines": ["sqlalchemy.exc.OperationalError: (psycopg2.errors.QueryCanceled) canceling statement due to statement timeout"]
+          }
+
+      - log_context: |
+          [2025-08-13 16:12:30] INFO: Connecting to S3 bucket
+          [2025-08-13 16:12:31] ERROR: botocore.exceptions.ClientError: An error occurred (403) when calling the GetObject operation: Access Denied
+          [2025-08-13 16:12:31] ERROR: Failed to download file from S3
+        extracted_response: |
+          {
+            "error_message": "botocore.exceptions.ClientError: An error occurred (403) when calling the GetObject operation: Access Denied",
+            "confidence": 0.95,
+            "category": "permission_error",
+            "severity": "high",
+            "reasoning": "S3 access denied error, clear permission/authentication issue",
+            "error_lines": ["botocore.exceptions.ClientError: An error occurred (403) when calling the GetObject operation: Access Denied"]
+          }
+
+  # Custom prompt templates (override defaults)
+  templates:
+    error_extraction: |
+      You are an expert ETL engineer analyzing Airflow task failure logs. Your job is to identify the root cause error from noisy log data.
+
+      Here are some examples of how to extract errors correctly:
+      {few_shot_examples}
+
+      Now analyze this log:
+
+      Log Context:
+      {log_context}
+
+      DAG ID: {dag_id}
+      Task ID: {task_id}
+
+      Instructions:
+      1. Identify the PRIMARY error that caused the task failure
+      2. Ignore informational, debug, or warning messages unless they're the root cause
+      3. Focus on the MOST RELEVANT error line(s)
+      4. Provide confidence score (0.0-1.0)
+      5. Choose EXACTLY ONE category from: resource_error, data_quality, dependency_failure, configuration_error, permission_error, timeout_error, unknown
+
+      Respond in JSON format:
+      {{
+          "error_message": "Exact error message that caused the failure",
+          "confidence": 0.85,
+          "category": "one_single_category_only",
+          "severity": "low|medium|high|critical",
+          "reasoning": "Brief explanation of why this is the root cause",
+          "error_lines": ["specific log lines that contain the error"]
+      }}
+
+    sms_error_extraction: |
+      Extract the most important error message from these Airflow task logs for SMS notification.
+
+      Examples:
+      Input: "psycopg2.OperationalError: FATAL: database 'analytics_db' does not exist"
+      Output: "Database 'analytics_db' not found"
+
+      Input: "pandas.errors.EmptyDataError: No columns to parse from file"
+      Output: "Empty CSV file - no data to parse"
+
+      Input: "botocore.exceptions.ClientError: Access Denied"
+      Output: "S3 access denied - check permissions"
+
+      Now extract from:
+      Log Context:
+      {log_context}
+
+      DAG ID: {dag_id}
+      Task ID: {task_id}
+
+      Instructions:
+      1. Find the PRIMARY error that caused the task failure
+      2. Return ONLY the exact error message
+      3. Keep it concise and actionable (max 160 chars for SMS)
+      4. Ignore informational and debug messages
+      5. Focus on the root cause, not symptoms
+
+      Return just the error message, nothing else.
