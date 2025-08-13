@@ -299,13 +299,13 @@ def get_error(
     from dagnostics.cli.utils import get_error_message
 
     try:
-        error_message = get_error_message(
+        _, _, error_line = get_error_message(
             dag_id, task_id, run_id, try_number, config_file, llm_provider
         )
 
         # Print when used as CLI command
-        typer.echo(error_message)
-        return error_message
+        typer.echo(error_line)
+        return error_line
 
     except Exception as e:
         error_msg = f"Error extraction failed: {e}"

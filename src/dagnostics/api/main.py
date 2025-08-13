@@ -6,6 +6,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from dagnostics import __version__
 from dagnostics.analysis.analyzer import DAGAnalyzer
 from dagnostics.core.models import (
     AnthropicLLMConfig,
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="DAGnostics API",
     description="Intelligent ETL Monitoring and Analysis API",
-    version="1.0.0",
+    version=__version__,
 )
 
 # CORS middleware for web frontend

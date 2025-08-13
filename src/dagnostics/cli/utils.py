@@ -2,7 +2,7 @@
 Reusable utilities for CLI commands
 """
 
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import typer
 
@@ -12,6 +12,7 @@ from dagnostics.core.config import load_config
 from dagnostics.core.models import (
     AppConfig,
     GeminiLLMConfig,
+    LogEntry,
     OllamaLLMConfig,
     OpenAILLMConfig,
 )
@@ -165,15 +166,15 @@ def get_error_message(
     try_number: int,
     config_file: Optional[str] = None,
     llm_provider: str = "ollama",
-) -> str:
+) -> tuple[str, Optional[List[LogEntry]], str]:
     """
     Internal function to get error message - can be used by CLI commands and other functions
     """
     try:
         _, analyzer = initialize_components(config_file, llm_provider)
-        error_message, _, _ = analyzer.extract_task_error_for_sms(
-            dag_id, task_id, run_id, try_number
+        error_message, error_candidates, error_line = (
+            analyzer.extract_task_error_for_sms(dag_id, task_id, run_id, try_number)
         )
-        return error_message
+        return error_message, error_candidates, error_line
     except Exception as e:
-        return f"Error extraction failed: {e}"
+        return f"Error extraction failed: {e}", None, ""
