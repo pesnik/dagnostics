@@ -66,14 +66,46 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 
 ## 🚀 Quick Start
 
+### Option 1: Using uv (Recommended)
+
 1.  Navigate to the project and install dependencies:
 
 ```bash
 cd dagnostics
+# Basic installation
 uv sync
+
+# With development dependencies
+uv sync --extra dev
+
+# With fine-tuning dependencies
+uv sync --extra finetuning
+
+# With all optional dependencies
+uv sync --extra all
 ```
 
-2.  Set up pre-commit hooks:
+### Option 2: Using pip
+
+```bash
+# Basic installation
+pip install dagnostics
+
+# With development dependencies
+pip install dagnostics[dev]
+
+# With fine-tuning dependencies
+pip install dagnostics[finetuning]
+
+# With all optional dependencies
+pip install dagnostics[all]
+```
+
+### Setup Steps
+
+1.  Choose your installation method above, then continue with setup:
+
+2.  Set up pre-commit hooks (if using uv for development):
 
 ```bash
 uv run pre-commit install
