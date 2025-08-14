@@ -137,12 +137,6 @@ def start(
 
 def report(
     daily: bool = Option(False, "--daily", help="Generate daily report"),
-    config_file: Optional[str] = Option(
-        None,
-        "--config",
-        "-c",
-        help="Path to configuration file (default: searches standard locations)",
-    ),
     output_format: ReportFormat = Option(
         ReportFormat.html, "--format", "-f", help="Report format"
     ),
@@ -286,7 +280,7 @@ def notify_failures(
                                 f"[DRY RUN] Would send to {recipients}: {enhanced_summary}"
                             )
                         else:
-                            sms_config = config.alerts.sms.dict()
+                            sms_config = config.alerts.sms.model_dump()
                             send_sms_alert(enhanced_summary, recipients, sms_config)
                             typer.echo(f"📱 Sent to {recipients}: {enhanced_summary}")
 

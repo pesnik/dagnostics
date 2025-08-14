@@ -1,0 +1,73 @@
+# Docker Compose for Training Environment
+# Separate training container with GPU support
+
+version: '3.8'
+
+services:
+  dagnostics-training:
+    build:
+      context: .
+      dockerfile: Dockerfile.training
+    container_name: dagnostics-training
+    volumes:
+      # Mount data directories
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./config:/app/config
+      - ./logs:/app/logs
+      # Mount source for development
+      - ./src:/app/src
+    environment:
+      - DAGNOSTICS_CONFIG=/app/config/config.yaml
+      - PYTHONPATH=/app/src
+      - CUDA_VISIBLE_DEVICES=0  # Use first GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      bash -c "
+        echo 'DAGnostics Training Environment Ready' &&
+        echo 'Available commands:' &&
+        echo '  python -m dagnostics.training.dataset_generator' &&
+        echo '  python -m dagnostics.training.fine_tuner' &&
+        echo '  dagnostics training generate-dataset' &&
+        echo '  dagnostics training train-model' &&
+        tail -f /dev/null
+      "
+    networks:
+      - dagnostics-net
+
+  # Main DAGnostics service (no ML deps)
+  dagnostics-main:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dagnostics-main
+    ports:
+      - "8000:8000"  # API
+      - "8080:8080"  # Web UI
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./src:/app/src
+    environment:
+      - DAGNOSTICS_CONFIG=/app/config/config.yaml
+      - PYTHONPATH=/app/src
+    command: >
+      bash -c "
+        echo 'Starting DAGnostics Main Service...' &&
+        dagnostics daemon start
+      "
+    networks:
+      - dagnostics-net
+    depends_on:
+      - dagnostics-training
+
+networks:
+  dagnostics-net:
+    driver: bridge

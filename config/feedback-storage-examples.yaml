@@ -1,0 +1,168 @@
+# DAGnostics Feedback Storage Configuration Examples
+#
+# This file shows different ways to configure storage for different deployment scenarios.
+# Copy the relevant section to your config.yaml file.
+
+# =============================================================================
+# Example 1: Development Setup (Default - SQLite with local storage)
+# =============================================================================
+development_example:
+  feedback:
+    storage:
+      database_url: "sqlite:///data/feedback.db"
+      jsonl_file: "data/feedback_data.jsonl"
+      training_data_dir: "data/training"
+      raw_logs_dir: "data/raw"
+      retention_days: 90  # Keep 3 months for development
+      cleanup_enabled: true
+      backup:
+        enabled: true
+        interval_hours: 24
+        backup_dir: "data/backups"
+        max_backups: 7
+
+# =============================================================================
+# Example 2: Production Setup with Environment Variables
+# =============================================================================
+production_example:
+  feedback:
+    storage:
+      # Use environment variables for production deployments
+      database_url: "${DAGNOSTICS_FEEDBACK_DB_URL:-sqlite:///data/feedback.db}"
+      jsonl_file: "${DAGNOSTICS_FEEDBACK_JSONL:-/var/lib/dagnostics/feedback_data.jsonl}"
+      training_data_dir: "${DAGNOSTICS_TRAINING_DIR:-/var/lib/dagnostics/training}"
+      raw_logs_dir: "${DAGNOSTICS_RAW_LOGS_DIR:-/var/lib/dagnostics/raw}"
+      retention_days: 365  # Keep 1 year in production
+      cleanup_enabled: true
+      backup:
+        enabled: true
+        interval_hours: 6   # More frequent backups
+        backup_dir: "${DAGNOSTICS_BACKUP_DIR:-/backup/dagnostics}"
+        max_backups: 28     # Keep 1 week of 6-hour backups
+
+# =============================================================================
+# Example 3: PostgreSQL Production Setup
+# =============================================================================
+postgresql_example:
+  feedback:
+    storage:
+      # PostgreSQL for production scale
+      database_url: "${DATABASE_URL:-postgresql://user:pass@localhost:5432/dagnostics_feedback}"
+      jsonl_file: "/var/lib/dagnostics/feedback_backup.jsonl"  # JSONL as backup
+      training_data_dir: "/var/lib/dagnostics/training"
+      raw_logs_dir: "/var/lib/dagnostics/raw"
+      retention_days: 730  # Keep 2 years for compliance
+      cleanup_enabled: true
+      backup:
+        enabled: true
+        interval_hours: 4
+        backup_dir: "/backup/dagnostics"
+        max_backups: 42  # One week of 4-hour backups
+
+# =============================================================================
+# Example 4: Multi-Environment Setup
+# =============================================================================
+multi_environment_example:
+  feedback:
+    storage:
+      # Dynamic based on environment
+      database_url: "${DAGNOSTICS_FEEDBACK_DB_URL:-sqlite:///data/feedback_${ENVIRONMENT:-dev}.db}"
+      jsonl_file: "${DAGNOSTICS_FEEDBACK_JSONL:-data/feedback_${ENVIRONMENT:-dev}.jsonl}"
+      training_data_dir: "${DAGNOSTICS_TRAINING_DIR:-data/training_${ENVIRONMENT:-dev}}"
+      raw_logs_dir: "${DAGNOSTICS_RAW_LOGS_DIR:-data/raw_${ENVIRONMENT:-dev}}"
+      retention_days: 180
+      cleanup_enabled: "${DAGNOSTICS_CLEANUP_ENABLED:-true}"
+      backup:
+        enabled: "${DAGNOSTICS_BACKUP_ENABLED:-true}"
+        interval_hours: 12
+        backup_dir: "${DAGNOSTICS_BACKUP_DIR:-data/backups_${ENVIRONMENT:-dev}}"
+        max_backups: 14
+
+# =============================================================================
+# Example 5: Docker/Kubernetes Setup
+# =============================================================================
+docker_kubernetes_example:
+  feedback:
+    storage:
+      # Persistent volumes and external database
+      database_url: "${DATABASE_URL:-postgresql://postgres:5432/dagnostics}"
+      jsonl_file: "/data/feedback_data.jsonl"      # Mounted volume
+      training_data_dir: "/data/training"          # Shared volume
+      raw_logs_dir: "/data/raw"                    # Ephemeral or mounted
+      retention_days: 365
+      cleanup_enabled: true
+      backup:
+        enabled: false  # Use database backups instead
+        interval_hours: 24
+        backup_dir: "/backups"
+        max_backups: 7
+
+# =============================================================================
+# Collection Configuration Examples
+# =============================================================================
+
+# Standard configuration
+standard_collection_example:
+  feedback:
+    collection:
+      min_quality_rating: 3
+      auto_export_threshold: 50
+      categories:
+        - configuration_error
+        - timeout_error
+        - data_quality
+        - dependency_failure
+        - resource_error
+        - permission_error
+        - network_error
+        - unknown
+      severities:
+        - low
+        - medium
+        - high
+        - critical
+
+# Extended categories for complex environments
+extended_collection_example:
+  feedback:
+    collection:
+      min_quality_rating: 4  # Higher quality threshold
+      auto_export_threshold: 100
+      categories:
+        - configuration_error
+        - timeout_error
+        - data_quality
+        - dependency_failure
+        - resource_error
+        - permission_error
+        - network_error
+        - database_error
+        - authentication_error
+        - memory_error
+        - disk_space_error
+        - api_error
+        - validation_error
+        - unknown
+      severities:
+        - trivial
+        - low
+        - medium
+        - high
+        - critical
+        - blocker
+
+# =============================================================================
+# Usage Examples
+# =============================================================================
+
+# Set environment variables before starting:
+# export DAGNOSTICS_FEEDBACK_DB_URL="postgresql://user:pass@db:5432/feedback"
+# export DAGNOSTICS_TRAINING_DIR="/shared/training"
+# export DAGNOSTICS_BACKUP_DIR="/backup/dagnostics"
+# export ENVIRONMENT="prod"
+
+# CLI commands will use configured storage:
+# uv run dagnostics feedback storage-info           # Show current config
+# uv run dagnostics feedback backup                 # Create backup
+# uv run dagnostics feedback cleanup --dry-run      # Check what would be cleaned
+# uv run dagnostics feedback stats                  # Show feedback statistics

@@ -152,10 +152,6 @@ def initialize_llm_provider(config: AppConfig, llm_provider: str) -> LLMProvider
         typer.echo(f"Error: Unknown LLM provider '{llm_provider}'", err=True)
         raise typer.Exit(code=1)
 
-    if llm_provider_instance is None:
-        typer.echo("Error: No LLM provider could be initialized.", err=True)
-        raise typer.Exit(code=1)
-
     return llm_provider_instance
 
 

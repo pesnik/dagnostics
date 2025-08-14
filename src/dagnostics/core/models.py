@@ -266,6 +266,75 @@ class PromptsConfig(BaseModel):
     templates: Dict[str, str] = Field(default_factory=dict)
 
 
+class FeedbackBackupConfig(BaseModel):
+    enabled: bool = True
+    interval_hours: int = 24
+    backup_dir: str = "data/backups"
+    max_backups: int = 7
+
+
+class FeedbackStorageConfig(BaseModel):
+    database_url: str = "sqlite:///data/feedback.db"
+    jsonl_file: str = "data/feedback_data.jsonl"
+    training_data_dir: str = "data/training"
+    raw_logs_dir: str = "data/raw"
+    retention_days: int = 365
+    cleanup_enabled: bool = True
+    backup: FeedbackBackupConfig = Field(default_factory=FeedbackBackupConfig)
+
+
+class FeedbackCollectionConfig(BaseModel):
+    min_quality_rating: int = 3
+    auto_export_threshold: int = 50
+    categories: List[str] = Field(
+        default_factory=lambda: [
+            "configuration_error",
+            "timeout_error",
+            "data_quality",
+            "dependency_failure",
+            "resource_error",
+            "permission_error",
+            "network_error",
+            "unknown",
+        ]
+    )
+    severities: List[str] = Field(
+        default_factory=lambda: ["low", "medium", "high", "critical"]
+    )
+
+
+class FeedbackNotificationConfig(BaseModel):
+    enabled: bool = False
+    email_template: str = "feedback_request.html"
+    slack_webhook: Optional[str] = None
+
+
+class FeedbackIntegrationConfig(BaseModel):
+    airflow_webhook: Optional[str] = None
+    notifications: FeedbackNotificationConfig = Field(
+        default_factory=FeedbackNotificationConfig
+    )
+
+
+class FeedbackWebInterfaceConfig(BaseModel):
+    enabled: bool = True
+    auto_redirect: bool = True
+    session_timeout: int = 3600
+
+
+class FeedbackConfig(BaseModel):
+    storage: FeedbackStorageConfig = Field(default_factory=FeedbackStorageConfig)
+    collection: FeedbackCollectionConfig = Field(
+        default_factory=FeedbackCollectionConfig
+    )
+    web_interface: FeedbackWebInterfaceConfig = Field(
+        default_factory=FeedbackWebInterfaceConfig
+    )
+    integration: FeedbackIntegrationConfig = Field(
+        default_factory=FeedbackIntegrationConfig
+    )
+
+
 class AppConfig(BaseModel):
     """Main application configuration structure."""
 
@@ -280,4 +349,5 @@ class AppConfig(BaseModel):
     database: DatabaseConfig
     api: APIConfig
     web: WebConfig
+    feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     prompts: Optional[PromptsConfig] = None

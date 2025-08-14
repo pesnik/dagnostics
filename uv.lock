@@ -3,7 +3,8 @@ revision = 2
 requires-python = ">=3.10, <4.0"
 resolution-markers = [
     "python_full_version >= '3.13'",
-    "python_full_version >= '3.11' and python_full_version < '3.13'",
+    "python_full_version == '3.12.*'",
+    "python_full_version == '3.11.*'",
     "python_full_version < '3.11'",
 ]
 
@@ -1568,7 +1569,8 @@ version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.13'",
-    "python_full_version >= '3.11' and python_full_version < '3.13'",
+    "python_full_version == '3.12.*'",
+    "python_full_version == '3.11.*'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2e/19/d7c972dfe90a353dbd3efbbe1d14a5951de80c99c9dc1b93cd998d51dc0f/numpy-2.3.1.tar.gz", hash = "sha256:1ec9ae20a4226da374362cca3c62cd753faf2f951440b0e3b98e93c235441d2b", size = 20390372, upload-time = "2025-06-21T12:28:33.469Z" }
 wheels = [

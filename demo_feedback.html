@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DAGnostics - Error Analysis Feedback</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .log-context { background: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace; }
+        .analysis-section { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .rating { margin: 10px 0; }
+        .rating input[type="radio"] { margin: 0 5px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        textarea, input, select { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DAGnostics Error Analysis Feedback</h1>
+        <p>Help improve our error analysis by reviewing and correcting the AI analysis below.</p>
+
+        <div id="feedback-form">
+            <!-- Log Context -->
+            <h3>Log Context</h3>
+            <div class="log-context" id="log-context">
+                <pre>[2025-08-10T16:13:23.140+0600] {taskinstance.py:1225} INFO - Marking task as FAILED. dag_id=downstream_bts_wise_service_revenue_monthly, task_id=tpt_bts_wise_service_revenue_monthly_export
+[2025-08-10T16:13:23.581+0600] {logging_mixin.py:190} INFO - Failure caused by TPT Error: TPT_INFRA: TPT04183: Error: Line 1 of Command Line:
+[2025-08-10T16:13:23.597+0600] {standard_task_runner.py:124} ERROR - Failed to execute job 15285469 for task tpt_bts_wise_service_revenue_monthly_export (TPT Error: TPT_INFRA: TPT04183: Error: Line 1 of Command Line:</pre>
+            </div>
+
+            <!-- Original Analysis -->
+            <div class="analysis-section">
+                <h3>AI Analysis</h3>
+                <div id="original-analysis">
+                    <p><strong>Error:</strong> TPT Error: TPT_INFRA: TPT04183: Error: Line 1 of Command Line:</p>
+                    <p><strong>Category:</strong> configuration_error</p>
+                    <p><strong>Severity:</strong> high</p>
+                    <p><strong>Confidence:</strong> 0.85</p>
+                    <p><strong>Reasoning:</strong> TPT export template configuration error on command line parsing</p>
+                </div>
+            </div>
+
+            <!-- Correction Form -->
+            <div class="analysis-section">
+                <h3>Your Corrections</h3>
+                <form id="correction-form">
+                    <label>Error Message:</label>
+                    <textarea id="error-message" rows="3" placeholder="Corrected error message"></textarea>
+
+                    <label>Category:</label>
+                    <select id="category">
+                        <option value="configuration_error">Configuration Error</option>
+                        <option value="timeout_error">Timeout Error</option>
+                        <option value="data_quality">Data Quality</option>
+                        <option value="dependency_failure">Dependency Failure</option>
+                        <option value="resource_error">Resource Error</option>
+                        <option value="permission_error">Permission Error</option>
+                        <option value="unknown">Unknown</option>
+                    </select>
+
+                    <label>Severity:</label>
+                    <select id="severity">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+
+                    <label>Confidence (0.0 - 1.0):</label>
+                    <input type="number" id="confidence" min="0" max="1" step="0.1" value="0.8">
+
+                    <label>Reasoning:</label>
+                    <textarea id="reasoning" rows="2" placeholder="Brief explanation of the error"></textarea>
+
+                    <div class="rating">
+                        <label>Rate the AI Analysis Quality:</label><br>
+                        <input type="radio" name="rating" value="1"> 1 (Poor)
+                        <input type="radio" name="rating" value="2"> 2 (Fair)
+                        <input type="radio" name="rating" value="3"> 3 (Good)
+                        <input type="radio" name="rating" value="4"> 4 (Very Good)
+                        <input type="radio" name="rating" value="5"> 5 (Excellent)
+                    </div>
+
+                    <label>Additional Comments (optional):</label>
+                    <textarea id="comments" rows="2" placeholder="Any additional feedback"></textarea>
+
+                    <button type="submit">Submit Feedback</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('correction-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Collect form data
+            const feedback = {
+                error_message: document.getElementById('error-message').value,
+                category: document.getElementById('category').value,
+                severity: document.getElementById('severity').value,
+                confidence: parseFloat(document.getElementById('confidence').value),
+                reasoning: document.getElementById('reasoning').value,
+                user_rating: document.querySelector('input[name="rating"]:checked')?.value || null,
+                comments: document.getElementById('comments').value
+            };
+
+            // In a real implementation, this would be sent to the server
+            alert('Feedback submitted! (Demo mode - would be sent to server in production)');
+            console.log('Feedback data:', feedback);
+        });
+    </script>
+</body>
+</html>

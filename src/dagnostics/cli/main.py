@@ -10,11 +10,18 @@ from dagnostics.cli.commands import (
     status,
     stop,
 )
+from dagnostics.cli.feedback_commands import feedback_app
+from dagnostics.cli.training_commands import training_app
 from dagnostics.utils.logger import setup_logging
 
 setup_logging()
 
 app = typer.Typer(help="DAGnostics - Intelligent ETL Monitoring System CLI")
+
+# Add training subcommand
+app.add_typer(training_app, name="training")
+# Add feedback subcommand
+app.add_typer(feedback_app, name="feedback")
 
 app.command()(start)
 app.command()(stop)
