@@ -25,7 +25,7 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 ---
 
 ## System Architecture
-![System Architecture](docs/system_architecture.png)
+![System Architecture](docs/system_architecture.svg)
 ---
 
 ## 🛠 Tech Stack
