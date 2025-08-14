@@ -21,8 +21,6 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "openai>=1.97.1",
     "apscheduler>=3.11.0",
-    "pre-commit>=4.2.0",
-    "types-requests>=2.32.4.20250611",
     "dynaconf>=3.2.11",
     "psycopg2-binary>=2.9.10",
     "anthropic>=0.59.0",
@@ -49,19 +47,33 @@ dev = [
     "isort>=5.13.2",
     "flake8>=7.1.1",
     "mypy>=1.14.1",
-    "pre-commit>=4.0.1",
+    "pre-commit>=4.2.0",
+    "types-requests>=2.32.4.20250611",
     "types-pyyaml>=6.0.12.20241230",
     "pylint-venv>=3.0.4",
 ]
 
 # All optional dependencies for full functionality
 all = [
+    # Fine-tuning dependencies
     "torch>=2.0.0",
     "transformers>=4.35.0",
     "datasets>=2.14.0",
     "peft>=0.6.0",
     "bitsandbytes>=0.41.0",
     "accelerate>=0.24.0",
+    # Development dependencies
+    "invoke>=2.2.0",
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+    "black>=24.10.0",
+    "isort>=5.13.2",
+    "flake8>=7.1.1",
+    "mypy>=1.14.1",
+    "pre-commit>=4.2.0",
+    "types-requests>=2.32.4.20250611",
+    "types-pyyaml>=6.0.12.20241230",
+    "pylint-venv>=3.0.4",
 ]
 
 [project.scripts]
