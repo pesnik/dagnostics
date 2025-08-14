@@ -10,41 +10,46 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
-# Try to import ML dependencies gracefully
-try:
-    import torch
-    from datasets import Dataset, load_dataset
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        BitsAndBytesConfig,
-        DataCollatorForSeq2Seq,
-        Trainer,
-        TrainingArguments,
-    )
-
-    HAS_ML_DEPS = True
-except ImportError as e:
-    HAS_ML_DEPS = False
-    MISSING_DEPS = str(e)
-    # Provide fallback types for linting
-    torch = None
-    Dataset = None
-    load_dataset = None
-    LoraConfig = None
-    get_peft_model = None
-    prepare_model_for_kbit_training = None
-    AutoModelForCausalLM = None
-    AutoTokenizer = None
-    BitsAndBytesConfig = None
-    DataCollatorForSeq2Seq = None
-    Trainer = None
-    TrainingArguments = None
+if TYPE_CHECKING:
+    # Type-only imports - available for type checking but not at runtime
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
+
+
+def _import_optional_dependency(name: str, extra: str = ""):
+    """
+    Import optional dependency with helpful error message.
+
+    This is the standard pattern used by pandas, scipy, etc.
+    """
+    msg = (
+        f"Missing optional dependency '{name}'. {extra}\n"
+        f"Install with: pip install 'dagnostics[finetuning]' or pip install {name}"
+    )
+    try:
+        module = __import__(name)
+        return module
+    except ImportError:
+        raise ImportError(msg) from None
+
+
+def _check_ml_dependencies():
+    """Check if ML training dependencies are available"""
+    try:
+        import datasets  # noqa: F401
+        import peft  # noqa: F401
+        import torch  # noqa: F401
+        import transformers  # noqa: F401
+
+        return True, None
+    except ImportError as e:
+        return False, str(e)
+
+
+HAS_ML_DEPS, MISSING_DEPS = _check_ml_dependencies()
 
 
 class SLMFineTuner:
@@ -59,8 +64,9 @@ class SLMFineTuner:
 
         if not HAS_ML_DEPS:
             raise ImportError(
-                f"Training dependencies not available: {MISSING_DEPS}\n"
-                "Install with: pip install torch transformers datasets peft bitsandbytes"
+                f"Fine-tuning dependencies not available: {MISSING_DEPS}\n"
+                "Install with: pip install 'dagnostics[finetuning]' for all fine-tuning dependencies\n"
+                "Or install individually: pip install torch transformers datasets peft bitsandbytes"
             )
 
         self.model_name = model_name
@@ -69,31 +75,38 @@ class SLMFineTuner:
         self.use_quantization = use_quantization
 
         # Model will be loaded during training
-        self.model = None
-        self.tokenizer = None
+        self.model: Optional["AutoModelForCausalLM"] = None
+        self.tokenizer: Optional["AutoTokenizer"] = None
 
     def setup_model_and_tokenizer(self):
         """Initialize model and tokenizer with quantization if enabled"""
 
+        # Import dependencies at runtime
+        torch = _import_optional_dependency("torch", "Install with: pip install torch")
+        transformers = _import_optional_dependency(
+            "transformers", "Install with: pip install transformers"
+        )
+        peft = _import_optional_dependency("peft", "Install with: pip install peft")
+
         logger.info(f"Loading model: {self.model_name}")
 
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(self.model_name)
 
         # Add pad token if it doesn't exist
-        if self.tokenizer.pad_token is None:
+        if self.tokenizer and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Quantization config for memory efficiency
         if self.use_quantization:
-            bnb_config = BitsAndBytesConfig(
+            bnb_config = transformers.BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.float16,
                 bnb_4bit_use_double_quant=True,
             )
 
-            self.model = AutoModelForCausalLM.from_pretrained(
+            self.model = transformers.AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 quantization_config=bnb_config,
                 device_map="auto",
@@ -101,9 +114,9 @@ class SLMFineTuner:
             )
 
             # Prepare for k-bit training
-            self.model = prepare_model_for_kbit_training(self.model)
+            self.model = peft.prepare_model_for_kbit_training(self.model)
         else:
-            self.model = AutoModelForCausalLM.from_pretrained(
+            self.model = transformers.AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=torch.float16,
                 device_map="auto",
@@ -115,7 +128,10 @@ class SLMFineTuner:
     def setup_lora_config(self):
         """Configure LoRA (Low-Rank Adaptation) for efficient fine-tuning"""
 
-        lora_config = LoraConfig(
+        # Import peft at runtime
+        peft = _import_optional_dependency("peft", "Install with: pip install peft")
+
+        lora_config = peft.LoraConfig(
             r=16,  # Rank of adaptation
             lora_alpha=32,  # LoRA scaling parameter
             target_modules=[
@@ -137,10 +153,15 @@ class SLMFineTuner:
     def prepare_dataset(self, dataset_path: str):
         """Load and prepare dataset for training"""
 
+        # Import datasets at runtime
+        datasets = _import_optional_dependency(
+            "datasets", "Install with: pip install datasets"
+        )
+
         logger.info(f"Loading dataset from: {dataset_path}")
 
         # Load JSONL dataset
-        dataset = load_dataset("json", data_files=dataset_path, split="train")
+        dataset = datasets.load_dataset("json", data_files=dataset_path, split="train")
 
         def format_example(example):
             """Format training example as instruction-following conversation"""
@@ -169,6 +190,8 @@ class SLMFineTuner:
             """Tokenize the formatted text"""
 
             # Tokenize with truncation and padding
+            if self.tokenizer is None:
+                raise RuntimeError("Tokenizer must be initialized")
             tokenized = self.tokenizer(
                 examples["text"],
                 truncation=True,
@@ -200,13 +223,19 @@ class SLMFineTuner:
     ) -> str:
         """Fine-tune the model"""
 
+        # Import training dependencies at runtime
+        peft = _import_optional_dependency("peft", "Install with: pip install peft")
+        transformers = _import_optional_dependency(
+            "transformers", "Install with: pip install transformers"
+        )
+
         # Setup model and tokenizer
         if self.model is None:
             self.setup_model_and_tokenizer()
 
         # Setup LoRA
         lora_config = self.setup_lora_config()
-        self.model = get_peft_model(self.model, lora_config)
+        self.model = peft.get_peft_model(self.model, lora_config)
 
         # Print trainable parameters
         trainable_params = 0
@@ -227,7 +256,7 @@ class SLMFineTuner:
             eval_dataset = self.prepare_dataset(validation_dataset_path)
 
         # Training arguments
-        training_args = TrainingArguments(
+        training_args = transformers.TrainingArguments(
             output_dir=str(
                 self.output_dir
                 / f"checkpoint-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -257,7 +286,7 @@ class SLMFineTuner:
         )
 
         # Data collator
-        data_collator = DataCollatorForSeq2Seq(
+        data_collator = transformers.DataCollatorForSeq2Seq(
             tokenizer=self.tokenizer,
             model=self.model,
             label_pad_token_id=-100,
@@ -265,7 +294,7 @@ class SLMFineTuner:
         )
 
         # Initialize trainer
-        trainer = Trainer(
+        trainer = transformers.Trainer(
             model=self.model,
             args=training_args,
             train_dataset=train_dataset,
@@ -310,10 +339,16 @@ class SLMFineTuner:
     def evaluate_model(self, model_path: str, test_dataset_path: str) -> Dict:
         """Evaluate fine-tuned model on test set"""
 
+        # Import dependencies at runtime
+        torch = _import_optional_dependency("torch", "Install with: pip install torch")
+        transformers = _import_optional_dependency(
+            "transformers", "Install with: pip install transformers"
+        )
+
         logger.info(f"Evaluating model: {model_path}")
 
         # Load the fine-tuned model
-        model = AutoModelForCausalLM.from_pretrained(model_path)
+        model = transformers.AutoModelForCausalLM.from_pretrained(model_path)
         # tokenizer = AutoTokenizer.from_pretrained(model_path)  # Not used in evaluation
 
         # Load test dataset

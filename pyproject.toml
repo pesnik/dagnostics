@@ -1,6 +1,6 @@
 [project]
 name = "dagnostics"
-version = "0.3.0"
+version = "0.4.0"
 description = ""
 authors = [{ name = "pesnik", email = "hasanrakibul.masum@gmail.com" }]
 readme = "README.md"
@@ -30,6 +30,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Fine-tuning and ML training dependencies
+finetuning = [
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "datasets>=2.14.0",
+    "peft>=0.6.0",
+    "bitsandbytes>=0.41.0",
+    "accelerate>=0.24.0",
+]
+
+# Development dependencies
 dev = [
     "invoke>=2.2.0",
     "pytest>=8.3.4",
@@ -43,6 +54,16 @@ dev = [
     "pylint-venv>=3.0.4",
 ]
 
+# All optional dependencies for full functionality
+all = [
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "datasets>=2.14.0",
+    "peft>=0.6.0",
+    "bitsandbytes>=0.41.0",
+    "accelerate>=0.24.0",
+]
+
 [project.scripts]
 start = "dagnostics.main:main"
 dagnostics = "dagnostics.cli.main:cli"
@@ -50,6 +71,7 @@ dagnostics = "dagnostics.cli.main:cli"
 [tool.uv]
 package = true
 dev-dependencies = [
+    # Standard dev tools
     "invoke>=2.2.0",
     "pytest>=8.3.4",
     "pytest-cov>=6.0.0",
@@ -60,6 +82,13 @@ dev-dependencies = [
     "pre-commit>=4.0.1",
     "types-pyyaml>=6.0.12.20241230",
     "pylint-venv>=3.0.4",
+    # Include fine-tuning deps for developers
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "datasets>=2.14.0",
+    "peft>=0.6.0",
+    "bitsandbytes>=0.41.0",
+    "accelerate>=0.24.0",
 ]
 
 [build-system]
