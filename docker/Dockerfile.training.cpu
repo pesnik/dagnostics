@@ -35,7 +35,7 @@ COPY pyproject.toml uv.lock README.md ./
 # Install Python dependencies (CPU-only PyTorch)
 RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir uv && \
-    uv venv && \
+    uv venv --python python3 && \
     . .venv/bin/activate && \
     # Install CPU-only PyTorch first
     uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -57,7 +57,8 @@ COPY --chown=trainer:trainer . /app/
 
 # Install the application and CPU-only ML dependencies
 RUN . .venv/bin/activate && \
-    uv add transformers datasets peft accelerate --no-sync && \
+    uv add transformers datasets peft accelerate && \
+    uv sync --no-dev && \
     pip install -e .
 
 # Switch to non-root user
@@ -71,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
 # Default command - CPU training server
-CMD ["/app/.venv/bin/python", "-m", "dagnostics.training.training_server", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["bash", "-c", "source /app/.venv/bin/activate && python -m dagnostics.training.training_server --host 0.0.0.0 --port 8001"]
