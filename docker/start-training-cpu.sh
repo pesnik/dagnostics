@@ -84,11 +84,11 @@ setup_directories() {
     mkdir -p "./server_data/datasets"
     mkdir -p "./evaluations"
 
-    # Set proper permissions
-    chmod -R 755 "$DATA_DIR"
-    chmod -R 755 "$CACHE_DIR"
-    chmod -R 755 "./server_data"
-    chmod -R 755 "./evaluations"
+    # Set proper permissions (777 for Docker container access)
+    chmod -R 777 "$DATA_DIR"
+    chmod -R 777 "$CACHE_DIR"
+    chmod -R 777 "./server_data"
+    chmod -R 777 "./evaluations"
 
     print_success "Directories setup complete"
 }
