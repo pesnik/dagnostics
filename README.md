@@ -2,25 +2,41 @@
 
 DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyze, categorize, and report DAG failures in data pipelines. It provides automated parsing of DAG errors and is designed to generate comprehensive statistics for better observability.
 
-## 🌟 Features (Current Implementation)
+## 🌟 Features (v0.5.0)
 
+### 🔍 **Core Analysis Engine**
 - **Intelligent Error Analysis**: Automated DAG error log parsing and categorization using multiple LLM providers (Ollama, OpenAI, Anthropic, Gemini)
 - **Smart Baseline System**: Advanced error pattern recognition using Drain3 log clustering with baseline creation from successful task runs
 - **Few-Shot Learning**: Configurable prompts with curated examples for improved error extraction accuracy
 - **Multi-Provider LLM Support**: Seamless switching between local (Ollama) and cloud LLM providers
-- **Airflow Integration**: Direct integration with Airflow API and database for real-time log collection
-- **Configurable Prompts**: Customize LLM prompts without code deployment via configuration files
 - **Anomaly Detection**: Identify new error patterns by comparing against successful task baselines
-- **Web Dashboard UI**: Modern dashboard for monitoring (backend API may be incomplete)
-- **CLI Interface**: Comprehensive command-line tools for analysis and monitoring
+
+### 🌐 **Web Dashboard & Real-time Monitoring**
+- **Interactive Web Dashboard**: Modern React-like dashboard with real-time monitoring capabilities
+- **WebSocket Integration**: Live updates for analysis completion, new failures, and status changes
+- **RESTful API**: Comprehensive API endpoints for analysis, dashboard, monitoring, and training
+- **Real-time Statistics**: Live error trends, categories breakdown, and failure timelines
+- **Mobile-Responsive**: Optimized for desktop and mobile monitoring
+
+### 🎯 **Training Dataset Management**
+- **Training Interface**: Web-based interface for creating and managing ML training datasets
+- **Human Feedback Loop**: Review and correct LLM predictions to improve model accuracy
+- **Dataset Export**: Export training data in JSON, CSV, and JSONL formats
+- **Live Data Integration**: Pull failed tasks directly from Airflow for dataset creation
+- **Model Fine-tuning**: Built-in support for fine-tuning small language models
+
+### 🛠 **Integration & Operations**
+- **Airflow Integration**: Direct integration with Airflow API and database for real-time log collection
+- **CLI Interface**: Enhanced command-line tools including web dashboard launcher
 - **Smart Alerting**: SMS/Email notifications with concise error summaries
 - **Daemon Service**: Background monitoring service for continuous error detection
+- **Configurable Prompts**: Customize LLM prompts without code deployment via configuration files
 
-**Planned / Not Yet Implemented:**
+**Planned / Future Enhancements:**
 
-- Report generation and export (HTML, JSON, etc.)
-- Full integration with existing ETL monitoring systems
-- Advanced analytics and trend analysis
+- Advanced ML model training and deployment
+- Integration with existing ETL monitoring systems
+- Enhanced analytics and predictive capabilities
 
 ---
 
@@ -44,9 +60,11 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 - **Drain3** for intelligent log clustering and pattern recognition
 
 ### Web & API
-- **FastAPI** for high-performance REST API endpoints
-- **Typer** for intuitive CLI interface
-- **Jinja2** for web dashboard templating
+- **FastAPI** for high-performance REST API endpoints with WebSocket support
+- **Uvicorn** for ASGI web server with real-time capabilities
+- **WebSockets** for live dashboard updates and real-time monitoring
+- **Typer** for intuitive CLI interface with enhanced web commands
+- **Modern HTML/CSS/JS** for responsive web dashboard
 
 ### Data Processing
 - **Pandas** for log data analysis
@@ -335,7 +353,27 @@ These examples help LLMs provide more accurate error categorization and confiden
 
 DAGnostics provides a CLI for managing the monitoring and reporting system. Use the following commands:
 
-#### Start the System (Stub)
+#### Start the Web Dashboard
+
+```bash
+# Launch the interactive web dashboard
+uv run dagnostics web
+
+# Custom host and port
+uv run dagnostics web --host 0.0.0.0 --port 8080
+
+# Enable auto-reload for development
+uv run dagnostics web --reload --log-level debug
+```
+
+The web dashboard provides:
+- **Real-time monitoring** with live error updates
+- **Interactive analysis** with manual task analysis
+- **Training dataset management** for ML model improvement
+- **Error trends and analytics** with visual charts
+- **WebSocket integration** for instant notifications
+
+#### Start Monitoring Daemon
 
 ```bash
 uv run dagnostics start
@@ -418,6 +456,67 @@ from dagnostics.clustering.log_clusterer import LogClusterer
 clusterer = LogClusterer(config)
 baseline_clusters = clusterer.build_baseline_clusters(successful_logs, dag_id, task_id)
 anomalous_logs = clusterer.identify_anomalous_patterns(failed_logs, dag_id, task_id)
+```
+
+### REST API & WebSocket Features
+
+DAGnostics v0.5.0 includes a comprehensive REST API with real-time WebSocket capabilities:
+
+#### API Endpoints
+
+```bash
+# Start the API server
+uv run dagnostics web --host 0.0.0.0 --port 8000
+
+# API Documentation available at:
+# http://localhost:8000/docs (Swagger UI)
+# http://localhost:8000/redoc (ReDoc)
+```
+
+**Key API Routes:**
+- **Analysis**: `/api/v1/analysis/analyze` - Analyze task failures
+- **Dashboard**: `/api/v1/dashboard/stats` - Get dashboard statistics
+- **Monitor**: `/api/v1/monitor/status` - Monitor service status
+- **Training**: `/api/v1/training/candidates` - Manage training datasets
+
+#### WebSocket Real-time Updates
+
+```javascript
+// Connect to WebSocket for live updates
+const ws = new WebSocket('ws://localhost:8000/ws');
+
+ws.onmessage = function(event) {
+    const update = JSON.parse(event.data);
+
+    switch(update.type) {
+        case 'analysis_complete':
+            console.log('Analysis completed:', update.data);
+            break;
+        case 'new_failure':
+            console.log('New failure detected:', update.data);
+            break;
+        case 'status_change':
+            console.log('Status changed:', update.data);
+            break;
+    }
+};
+```
+
+#### Training Dataset API
+
+```bash
+# Get training candidates
+curl http://localhost:8000/api/v1/training/candidates
+
+# Submit human feedback
+curl -X POST http://localhost:8000/api/v1/training/candidates/{id}/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"action": "approve", "reviewer_name": "analyst"}'
+
+# Export dataset
+curl -X POST http://localhost:8000/api/v1/training/export \
+  -H "Content-Type: application/json" \
+  -d '{"format": "jsonl", "include_rejected": false}'
 ```
 
 ---
