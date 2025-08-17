@@ -1,48 +1,196 @@
-# from datetime import datetime
-# from typing import Any, Dict, cast  # Import cast for type hinting
+"""
+Database utilities and session management for DAGnostics.
 
-# from sqlalchemy import (
-#     JSON,
-#     Boolean,
-#     Column,
-#     DateTime,
-#     Float,
-#     Integer,
-#     String,
-#     Text,
-#     create_engine,
-# )
-# from sqlalchemy.ext.declarative import declarative_base
-# from sqlalchemy.orm import Session, sessionmaker
+This module provides database connection and session management functionality.
+"""
 
-# from dagnostics.core.models import AnalysisResult
+import logging
+import os
+from datetime import datetime
+from typing import Generator, Optional
 
-# Base: Any = declarative_base()
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    String,
+    Text,
+    create_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 
-# class AnalysisRecord(Base):
-#     """Database model for analysis results"""
+class Base(DeclarativeBase):
+    pass
 
-#     __tablename__ = "analysis_records"
 
-#     id = Column(String, primary_key=True)
-#     dag_id = Column(String, nullable=False, index=True)
-#     task_id = Column(String, nullable=False, index=True)
-#     run_id = Column(String, nullable=False)
+# Database engine and session factory
+_engine = None
+_SessionLocal = None
 
-#     error_message = Column(Text)
-#     category = Column(String, index=True)
-#     severity = Column(String, index=True)
-#     confidence = Column(Float)
 
-#     suggested_actions = Column(JSON)
-#     processing_time = Column(Float)
-#     timestamp = Column(DateTime, default=datetime.now, index=True)
-#     success = Column(Boolean, default=True)
+def get_database_url():
+    """Get database URL from environment or use SQLite default"""
+    return os.getenv("DATABASE_URL", "sqlite:///./dagnostics.db")
 
-#     # LLM analysis details
-#     llm_reasoning = Column(Text)
-#     raw_error_lines = Column(JSON)
+
+def init_database():
+    """Initialize database engine and create tables"""
+    global _engine, _SessionLocal
+
+    if _engine is None:
+        database_url = get_database_url()
+        _engine = create_engine(database_url, echo=False)
+        _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+
+        # Create all tables
+        Base.metadata.create_all(bind=_engine)
+        logger.info(f"Database initialized with URL: {database_url}")
+
+    return _engine
+
+
+def get_db_session() -> Generator[Session, None, None]:
+    """
+    Get database session for dependency injection.
+    """
+    if _SessionLocal is None:
+        init_database()
+
+    if _SessionLocal is not None:
+        session = _SessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+    else:
+        raise RuntimeError("Failed to initialize database session")
+
+
+class MockDBSession:
+    """Mock database session for development/testing"""
+
+    def query(self, _model):
+        """Mock query method"""
+        return MockQuery()
+
+    def commit(self):
+        """Mock commit method"""
+        pass
+
+    def rollback(self):
+        """Mock rollback method"""
+        pass
+
+    def close(self):
+        """Mock close method"""
+        pass
+
+
+class MockQuery:
+    """Mock query object"""
+
+    def filter(self, *_args):
+        """Mock filter method"""
+        return self
+
+    def order_by(self, *_args):
+        """Mock order_by method"""
+        return self
+
+    def limit(self, _limit):
+        """Mock limit method"""
+        return self
+
+    def count(self):
+        """Mock count method"""
+        return 0
+
+    def all(self):
+        """Mock all method"""
+        return []
+
+    def first(self):
+        """Mock first method"""
+        return None
+
+    def scalar(self):
+        """Mock scalar method"""
+        return None
+
+
+def get_mock_db_session() -> Generator:
+    """Get mock database session for development"""
+    session = MockDBSession()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+class ErrorCandidateModel(Base):
+    """Database model for training dataset error candidates"""
+
+    __tablename__ = "error_candidates"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    dag_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    error_message: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_logs: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # LLM analysis
+    llm_category: Mapped[Optional[str]] = mapped_column(String, index=True)
+    llm_severity: Mapped[Optional[str]] = mapped_column(String, index=True)
+    llm_confidence: Mapped[Optional[float]] = mapped_column(Float)
+    llm_reasoning: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Human feedback
+    human_category: Mapped[Optional[str]] = mapped_column(String)
+    human_severity: Mapped[Optional[str]] = mapped_column(String)
+    human_feedback: Mapped[Optional[str]] = mapped_column(Text)
+
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending", index=True
+    )  # pending, approved, rejected, modified
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
+    processing_time: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class AnalysisRecord(Base):
+    """Database model for analysis results"""
+
+    __tablename__ = "analysis_records"
+
+    id = Column(String, primary_key=True)
+    dag_id = Column(String, nullable=False, index=True)
+    task_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, nullable=False)
+
+    error_message = Column(Text)
+    category = Column(String, index=True)
+    severity = Column(String, index=True)
+    confidence = Column(Float)
+
+    suggested_actions = Column(JSON)
+    processing_time = Column(Float)
+    timestamp = Column(DateTime, default=datetime.now, index=True)
+    success = Column(Boolean, default=True)
+
+    # LLM analysis details
+    llm_reasoning = Column(Text)
+    raw_error_lines = Column(JSON)
 
 
 # class BaselineRecord(Base):
