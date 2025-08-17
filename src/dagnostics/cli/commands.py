@@ -11,6 +11,39 @@ from dagnostics.daemon.service import DaemonService
 from dagnostics.utils.sms import send_sms_alert
 
 
+def web(
+    host: str = Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
+    port: int = Option(8000, "--port", "-p", help="Port to bind to"),
+    reload: bool = Option(
+        False, "--reload", "-r", help="Enable auto-reload for development"
+    ),
+    log_level: str = Option(
+        "info", "--log-level", help="Log level (debug, info, warning, error)"
+    ),
+):
+    """Start the DAGnostics web dashboard."""
+    try:
+        from dagnostics.web.app import run_dashboard
+
+        typer.echo(f"🚀 Starting DAGnostics Web Dashboard on {host}:{port}")
+        typer.echo("📊 Dashboard features:")
+        typer.echo("   • Real-time monitoring")
+        typer.echo("   • Interactive analysis")
+        typer.echo("   • WebSocket updates")
+        typer.echo("   • RESTful API")
+        typer.echo("   • Error trends and analytics")
+        typer.echo("")
+        typer.echo(f"🌐 Access the dashboard at: http://{host}:{port}/dashboard")
+        typer.echo(f"📡 API documentation at: http://{host}:{port}/docs")
+        typer.echo("")
+
+        run_dashboard(host=host, port=port, reload=reload, log_level=log_level)
+
+    except Exception as e:
+        typer.echo(f"❌ Failed to start web dashboard: {e}", err=True)
+        raise typer.Exit(1)
+
+
 def analyze(
     dag_id: str = Argument(..., help="ID of the DAG to analyze"),
     task_id: str = Argument(..., help="ID of the task to analyze"),

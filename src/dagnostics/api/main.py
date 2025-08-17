@@ -1,27 +1,66 @@
+import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import List, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from dagnostics import __version__
-from dagnostics.analysis.analyzer import DAGAnalyzer
-from dagnostics.core.models import (
-    AnthropicLLMConfig,
-    AppConfig,
-    OllamaLLMConfig,
-    OpenAILLMConfig,
-)
+from dagnostics.api.routes import analysis, dashboard, monitor, training
+from dagnostics.api.schemas import RealTimeUpdate
+from dagnostics.api.websocket_manager import start_heartbeat_task, websocket_manager
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events"""
+    # Startup
+    import asyncio
+
+    # Initialize database
+    from dagnostics.core.database import init_database
+
+    try:
+        init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+
+    # Start heartbeat task
+    asyncio.create_task(start_heartbeat_task())
+    logger.info("DAGnostics API started with real-time capabilities")
+
+    yield
+
+    # Shutdown
+    logger.info("DAGnostics API shutting down")
+
 
 app = FastAPI(
     title="DAGnostics API",
     description="Intelligent ETL Monitoring and Analysis API",
     version=__version__,
+    lifespan=lifespan,
 )
+
+# Include routers
+app.include_router(analysis.router, prefix="/api/v1")
+app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(monitor.router, prefix="/api/v1")
+app.include_router(training.router, prefix="/api/v1")
+
+# Mount static files
+try:
+    app.mount(
+        "/static", StaticFiles(directory="src/dagnostics/web/static"), name="static"
+    )
+except Exception:
+    pass  # Static directory might not exist
 
 # CORS middleware for web frontend
 app.add_middleware(
@@ -33,123 +72,34 @@ app.add_middleware(
 )
 
 
-# Request/Response Models
-class AnalyzeRequest(BaseModel):
-    dag_id: str
-    task_id: str
-    run_id: str
-    try_number: int
-    force_baseline_refresh: bool = False
-
-
-class AnalyzeResponse(BaseModel):
-    analysis_id: str
-    dag_id: str
-    task_id: str
-    run_id: str
-    error_message: Optional[str] = None
-    category: Optional[str] = None
-    severity: Optional[str] = None
-    confidence: Optional[float] = None
-    suggested_actions: List[str] = []
-    processing_time: float
-    timestamp: datetime
-    success: bool
-
-
-class MonitorStatus(BaseModel):
-    is_running: bool
-    last_check: Optional[datetime] = None
-    failed_tasks_count: int = 0
-    processed_today: int = 0
-    average_processing_time: float = 0.0
-
-
-class DailySummary(BaseModel):
-    date: str
-    total_failures: int
-    categories: dict
-    top_failing_dags: List[dict]
-    resolution_rate: float
-
-
-# Dependency injection
-def get_analyzer():
-    """Get configured DAGAnalyzer instance"""
-    from dagnostics.analysis.analyzer import DAGAnalyzer
-    from dagnostics.clustering.log_clusterer import LogClusterer
-    from dagnostics.core.airflow_client import AirflowClient
-    from dagnostics.core.config import load_config
-    from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
-    from dagnostics.llm.engine import LLMEngine, OllamaProvider
-
-    config: AppConfig = load_config()
-
-    airflow_client = AirflowClient(
-        base_url=config.airflow.base_url,
-        username=config.airflow.username,
-        password=config.airflow.password,
-        db_connection=config.airflow.database_url,
-        verify_ssl=False,
-    )
-
-    # Accessing drain3.persistence_path directly via dot notation
-    clusterer = LogClusterer(
-        persistence_path=config.drain3.persistence_path, app_config=config
-    )
-
-    # If ErrorPatternFilter takes config_path from AppConfig:
-    # filter = ErrorPatternFilter(config_path=config.pattern_filtering.config_path)
-    # Otherwise, if it has sensible defaults, you can keep it as:
-    filter = ErrorPatternFilter()
-
-    # Determine which LLM provider to use based on config.llm.default_provider
-    # This requires more robust handling than just assuming Ollama.
-    # A proper implementation would involve a factory function or similar.
-
-    llm_provider_config = config.llm.providers.get(config.llm.default_provider)
-    if llm_provider_config is None:
-        raise ValueError(
-            f"LLM provider '{config.llm.default_provider}' not found in configuration."
-        )
-
-    if isinstance(llm_provider_config, OllamaLLMConfig):
-        llm_provider = OllamaProvider(
-            base_url=llm_provider_config.base_url,
-            model=llm_provider_config.model,
-        )
-    elif isinstance(llm_provider_config, OpenAILLMConfig):
-        # from dagnostics.llm.engine import OpenAIProvider
-        # llm_provider = OpenAIProvider(
-        #     api_key=llm_provider_config.api_key,
-        #     model=llm_provider_config.model,
-        #     base_url=llm_provider_config.base_url # This is why base_url was added as Optional
-        # )
-        raise NotImplementedError("OpenAIProvider not yet implemented or configured.")
-    elif isinstance(llm_provider_config, AnthropicLLMConfig):
-        # from dagnostics.llm.engine import AnthropicProvider
-        # llm_provider = AnthropicProvider(
-        #     api_key=llm_provider_config.api_key,
-        #     model=llm_provider_config.model,
-        #     base_url=llm_provider_config.base_url
-        # )
-        raise NotImplementedError(
-            "AnthropicProvider not yet implemented or configured."
-        )
-    else:
-        raise TypeError(
-            f"Unknown LLM provider configuration type: {type(llm_provider_config)}"
-        )
-
-    llm = LLMEngine(llm_provider)
-
-    return DAGAnalyzer(airflow_client, clusterer, filter, llm)
-
-
 # API Endpoints
 @app.get("/")
 async def root():
-    return {"message": "DAGnostics API", "version": "1.0.0", "status": "running"}
+    return {"message": "DAGnostics API", "version": __version__, "status": "running"}
+
+
+@app.get("/dashboard")
+async def serve_dashboard():
+    """Serve the training dataset creator"""
+    try:
+        return FileResponse("src/dagnostics/web/templates/training.html")
+    except Exception:
+        return {
+            "message": "Dashboard not available",
+            "error": "Template file not found",
+        }
+
+
+@app.get("/dashboard/monitoring")
+async def serve_monitoring_dashboard():
+    """Serve the original monitoring dashboard"""
+    try:
+        return FileResponse("src/dagnostics/web/templates/index.html")
+    except Exception:
+        return {
+            "message": "Dashboard not available",
+            "error": "Template file not found",
+        }
 
 
 @app.get("/health")
@@ -158,107 +108,93 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
 
 
-@app.post("/api/v1/analyze", response_model=AnalyzeResponse)
-async def analyze_task(
-    request: AnalyzeRequest, analyzer: DAGAnalyzer = Depends(get_analyzer)
-):
-    """Analyze a specific task failure"""
+# Legacy analyze endpoint for backward compatibility
+@app.post("/api/v1/analyze")
+async def analyze_task_legacy(request: dict):
+    """Legacy analyze endpoint - redirects to new analysis route"""
     try:
-        result = analyzer.analyze_task_failure(
-            request.dag_id, request.task_id, request.run_id, request.try_number
-        )
+        from dagnostics.api.routes.analysis import get_analyzer
+        from dagnostics.api.schemas import AnalyzeRequest
 
-        return AnalyzeResponse(
-            analysis_id=result.id,
-            dag_id=result.dag_id,
-            task_id=result.task_id,
-            run_id=result.run_id,
-            error_message=result.analysis.error_message if result.analysis else None,
-            category=result.analysis.category.value if result.analysis else None,
-            severity=result.analysis.severity.value if result.analysis else None,
-            confidence=result.analysis.confidence if result.analysis else None,
-            suggested_actions=(
-                result.analysis.suggested_actions if result.analysis else []
-            ),
-            processing_time=result.processing_time,
-            timestamp=result.timestamp,
-            success=result.success,
+        analyzer = get_analyzer()
+        analyze_request = AnalyzeRequest(**request)
+        result = await analysis.analyze_task_failure(analyze_request, analyzer)
+
+        # Broadcast real-time update
+        await websocket_manager.broadcast_analysis_complete(result)
+
+        return result
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Analysis dependencies not available. Install with: pip install dagnostics[llm]",
         )
     except Exception as e:
-        logger.error(f"Analysis failed: {e}")
+        logger.error(f"Legacy analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/v1/monitor/status", response_model=MonitorStatus)
-async def get_monitor_status():
-    """Get monitoring service status"""
-    # This would integrate with the actual monitor service
-    return MonitorStatus(
-        is_running=True,
-        last_check=datetime.now(),
-        failed_tasks_count=5,
-        processed_today=23,
-        average_processing_time=2.3,
-    )
-
-
-@app.post("/api/v1/monitor/start")
-async def start_monitoring(background_tasks: BackgroundTasks):
-    """Start monitoring service"""
-    # background_tasks.add_task(start_monitor_service)
-    return {"message": "Monitoring service started"}
-
-
-@app.post("/api/v1/monitor/stop")
-async def stop_monitoring():
-    """Stop monitoring service"""
-    return {"message": "Monitoring service stopped"}
-
-
-@app.get("/api/v1/reports/daily", response_model=DailySummary)
-async def get_daily_report(date: Optional[str] = None):
-    """Get daily summary report"""
-    target_date = (
-        datetime.strptime(date, "%Y-%m-%d").date() if date else datetime.now().date()
-    )
-
-    # This would query the database for actual data
-    return DailySummary(
-        date=str(target_date),
-        total_failures=15,
-        categories={
-            "resource_error": 5,
-            "data_quality": 3,
-            "dependency_failure": 4,
-            "timeout_error": 2,
-            "unknown": 1,
+# WebSocket endpoint for real-time updates
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket_manager.connect(
+        websocket,
+        {
+            "connected_at": datetime.now().isoformat(),
+            "user_agent": websocket.headers.get("user-agent", "unknown"),
         },
-        top_failing_dags=[
-            {"dag_id": "etl_pipeline_1", "failures": 5},
-            {"dag_id": "data_ingestion", "failures": 3},
-            {"dag_id": "reporting_job", "failures": 2},
-        ],
-        resolution_rate=0.73,
     )
 
-
-@app.get("/api/v1/baselines")
-async def get_baselines():
-    """Get all baseline information"""
-    return {"baselines": {}, "message": "Baseline management endpoint"}
-
-
-@app.post("/api/v1/baselines/rebuild")
-async def rebuild_baseline(
-    dag_id: str, task_id: str, analyzer: DAGAnalyzer = Depends(get_analyzer)
-):
-    """Rebuild baseline for specific DAG/task"""
     try:
-        # Force rebuild baseline
-        result = analyzer._ensure_baseline(dag_id, task_id)
-        return {
-            "message": f"Baseline rebuilt for {dag_id}.{task_id}",
-            "result": result.__dict__,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        while True:
+            # Keep connection alive and listen for client messages
+            data = await websocket.receive_text()
+
+            try:
+                message = (
+                    json.loads(data)
+                    if data.startswith("{")
+                    else {"type": "message", "data": data}
+                )
+
+                # Handle different message types
+                if message.get("type") == "ping":
+                    await websocket_manager.send_personal_message(
+                        websocket,
+                        {"type": "pong", "timestamp": datetime.now().isoformat()},
+                    )
+                else:
+                    # Echo other messages
+                    await websocket_manager.send_personal_message(
+                        websocket,
+                        {
+                            "type": "echo",
+                            "data": message,
+                            "timestamp": datetime.now().isoformat(),
+                        },
+                    )
+
+            except json.JSONDecodeError:
+                await websocket_manager.send_personal_message(
+                    websocket,
+                    {
+                        "type": "error",
+                        "message": "Invalid JSON format",
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
+
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket)
+
+
+@app.get("/api/v1/websocket/stats")
+async def get_websocket_stats():
+    """Get WebSocket connection statistics"""
+    return websocket_manager.get_connection_stats()
+
+
+# Utility function to broadcast real-time updates
+async def broadcast_update(update: RealTimeUpdate):
+    """Broadcast real-time update to all connected clients"""
+    await websocket_manager.broadcast_update(update)

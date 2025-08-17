@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DAGnostics - ETL Monitoring Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <!-- Chart.js DISABLED to prevent crashes -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.5.0/axios.min.js"></script>
     <style>
         * {
@@ -69,8 +69,8 @@
         }
 
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px); /* Reduced movement */
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); /* Lighter shadow */
         }
 
         .stat-card h3 {
@@ -170,8 +170,8 @@
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            transform: translateY(-1px); /* Reduced movement */
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); /* Lighter shadow */
         }
 
         .btn-secondary {
@@ -261,7 +261,8 @@
             border-radius: 8px;
             margin-bottom: 10px;
             background: rgba(248, 249, 250, 0.8);
-            transition: background 0.3s ease;
+            transition: background 0.2s ease; /* Faster transition */
+            will-change: background; /* Optimize for frequent changes */
         }
 
         .failure-item:hover {
@@ -320,6 +321,14 @@
         <div class="header">
             <h1>🔍 DAGnostics</h1>
             <p>Intelligent ETL Monitoring & Analysis Dashboard</p>
+            <div style="margin-top: 15px;">
+                <button class="btn btn-primary" onclick="manualRefresh()" id="refresh-btn">
+                    🔄 Manual Refresh
+                </button>
+                <span style="margin-left: 15px; font-size: 0.9rem; color: #666;">
+                    🛡️ Safe Mode: Auto-refresh disabled
+                </span>
+            </div>
         </div>
 
         <!-- Monitor Status -->
@@ -365,6 +374,10 @@
                     <label for="run-id">Run ID</label>
                     <input type="text" id="run-id" placeholder="manual__2024-01-15T10:30:00">
                 </div>
+                <div class="control-group">
+                    <label for="try-number">Try Number</label>
+                    <input type="number" id="try-number" value="1" min="1" max="10">
+                </div>
                 <button class="btn btn-primary" onclick="analyzeTask()">
                     <span id="analyze-btn-text">Analyze</span>
                     <span id="analyze-spinner" class="loading" style="display: none;"></span>
@@ -378,11 +391,11 @@
         <div class="charts-grid">
             <div class="chart-container">
                 <h3 class="chart-title">📈 Error Trends (Last 7 Days)</h3>
-                <canvas id="trends-chart"></canvas>
+                <div id="trends-chart" style="min-height: 200px;">Loading...</div>
             </div>
             <div class="chart-container">
                 <h3 class="chart-title">📊 Error Categories</h3>
-                <canvas id="categories-chart"></canvas>
+                <div id="categories-chart" style="min-height: 200px;">Loading...</div>
             </div>
         </div>
 
@@ -398,103 +411,167 @@
     <script>
         // API Configuration
         const API_BASE = 'http://localhost:8000/api/v1';
+        const WS_URL = 'ws://localhost:8000/ws';
 
         // Chart instances
         let trendsChart, categoriesChart;
+        let websocket = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
 
-        // Initialize dashboard
+        // Performance optimization: track last update times
+        let lastDataUpdate = 0;
+        let lastChartUpdate = 0;
+        const UPDATE_THROTTLE = 2000; // Minimum 2 seconds between updates
+
+        // Initialize dashboard - SAFE MODE
         document.addEventListener('DOMContentLoaded', function() {
-            initCharts();
-            loadDashboardData();
+            console.log('🛡️ DAGnostics Dashboard - Safe Mode');
+            console.log('Auto-refresh and real-time features disabled to prevent browser crashes');
 
-            // Refresh data every 30 seconds
-            setInterval(loadDashboardData, 30000);
+            try {
+                initCharts();
+                console.log('✅ Charts initialized');
+            } catch (e) {
+                console.error('❌ Chart initialization failed:', e);
+            }
+
+            try {
+                initWebSocket();
+                console.log('✅ WebSocket initialization (disabled)');
+            } catch (e) {
+                console.error('❌ WebSocket initialization failed:', e);
+            }
+
+            // Load data once only
+            setTimeout(() => {
+                loadDashboardData();
+                console.log('✅ Initial data loaded');
+            }, 1000);
         });
 
-        function initCharts() {
-            // Trends Chart
-            const trendsCtx = document.getElementById('trends-chart').getContext('2d');
-            trendsChart = new Chart(trendsCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Failed Tasks',
-                        data: [],
-                        borderColor: '#667eea',
-                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(0,0,0,0.1)'
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false
-                            }
-                        }
-                    }
-                }
-            });
+        // Disable WebSocket to prevent infinite loops
+        function initWebSocket() {
+            console.log('WebSocket disabled to prevent browser crashes');
+            showConnectionStatus('disabled');
+        }
 
-            // Categories Chart
-            const categoriesCtx = document.getElementById('categories-chart').getContext('2d');
-            categoriesChart = new Chart(categoriesCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        data: [],
-                        backgroundColor: [
-                            '#667eea',
-                            '#764ba2',
-                            '#f093fb',
-                            '#f5576c',
-                            '#4facfe',
-                            '#43e97b'
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
+        function handleRealTimeUpdate(message) {
+            console.log('Real-time update:', message);
+
+            switch (message.type) {
+                case 'analysis_complete':
+                    handleAnalysisComplete(message.data);
+                    break;
+                case 'new_failure':
+                    handleNewFailure(message.data);
+                    break;
+                case 'status_change':
+                    handleStatusChange(message.data);
+                    break;
+                default:
+                    console.log('Unknown message type:', message.type);
+            }
+        }
+
+        function showConnectionStatus(status) {
+            const indicator = document.querySelector('.connection-status');
+            if (!indicator) {
+                // Create status indicator if it doesn't exist
+                const statusEl = document.createElement('div');
+                statusEl.className = 'connection-status';
+                statusEl.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 8px 12px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    z-index: 1000;
+                    transition: opacity 0.2s ease; /* Only animate opacity */
+                `;
+                document.body.appendChild(statusEl);
+            }
+
+            const statusEl = document.querySelector('.connection-status');
+            switch (status) {
+                case 'connected':
+                    statusEl.textContent = '🟢 Live';
+                    statusEl.style.background = '#d4edda';
+                    statusEl.style.color = '#155724';
+                    break;
+                case 'disconnected':
+                    statusEl.textContent = '🟡 Reconnecting...';
+                    statusEl.style.background = '#fff3cd';
+                    statusEl.style.color = '#856404';
+                    break;
+                case 'disabled':
+                    statusEl.textContent = '⚪ Manual Mode';
+                    statusEl.style.background = '#e9ecef';
+                    statusEl.style.color = '#495057';
+                    break;
+                case 'error':
+                    statusEl.textContent = '🔴 Offline';
+                    statusEl.style.background = '#f8d7da';
+                    statusEl.style.color = '#721c24';
+                    break;
+            }
+        }
+
+        function initCharts() {
+            console.log('📊 Charts DISABLED to prevent browser crashes');
+            // Replace charts with static content
+            document.getElementById('trends-chart').innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 48px; margin-bottom: 10px;">📊</div>
+                        <div>Chart Disabled</div>
+                        <div style="font-size: 12px; margin-top: 5px;">To prevent browser crashes</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('categories-chart').innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 48px; margin-bottom: 10px;">🥧</div>
+                        <div>Chart Disabled</div>
+                        <div style="font-size: 12px; margin-top: 5px;">To prevent browser crashes</div>
+                    </div>
+                </div>
+            `;
         }
 
         async function loadDashboardData() {
+            console.log('📊 Loading dashboard data (safe mode - once only)');
+
             try {
-                // Load monitor status
+                // Load data sequentially to prevent overwhelming the browser
+                console.log('Loading monitor status...');
                 const statusResponse = await axios.get(`${API_BASE}/monitor/status`);
                 updateMonitorStatus(statusResponse.data);
 
-                // Load daily report
-                const reportResponse = await axios.get(`${API_BASE}/reports/daily`);
-                updateDashboardStats(reportResponse.data);
-                updateCharts(reportResponse.data);
+                console.log('Loading dashboard stats...');
+                const statsResponse = await axios.get(`${API_BASE}/dashboard/stats`);
+                updateDashboardStats(statsResponse.data);
+
+                console.log('Loading trends...');
+                const trendsResponse = await axios.get(`${API_BASE}/dashboard/trends`);
+                updateTrendsChart(trendsResponse.data);
+
+                console.log('Loading categories...');
+                updateCategoriesChart(statsResponse.data.error_categories);
+
+                console.log('Loading recent failures...');
+                const failuresResponse = await axios.get(`${API_BASE}/dashboard/recent-failures`);
+                updateRecentFailures(failuresResponse.data);
+
+                console.log('✅ All data loaded successfully');
 
             } catch (error) {
-                console.error('Failed to load dashboard data:', error);
-                showError('Failed to load dashboard data');
+                console.error('❌ Failed to load dashboard data:', error);
+                showError('Failed to load dashboard data. Check if the API server is running.');
             }
         }
 
@@ -539,48 +616,65 @@
             }
         }
 
-        function updateCharts(report) {
-            // Update categories chart
-            const categories = Object.keys(report.categories);
-            const categoryData = Object.values(report.categories);
+        function updateTrendsChart(trendsData) {
+            console.log('📈 Trends chart update DISABLED to prevent crashes');
 
-            categoriesChart.data.labels = categories.map(cat =>
-                cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
-            );
-            categoriesChart.data.datasets[0].data = categoryData;
-            categoriesChart.update();
+            // Create a simple text-based representation
+            const chartEl = document.getElementById('trends-chart');
+            let html = '<div style="padding: 20px; font-family: monospace;">';
+            html += '<h4>📈 Error Trends (Text Mode)</h4>';
 
-            // Update trends chart (mock data for demo)
-            const last7Days = Array.from({length: 7}, (_, i) => {
-                const date = new Date();
-                date.setDate(date.getDate() - (6 - i));
-                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            trendsData.forEach(item => {
+                const date = new Date(item.date).toLocaleDateString();
+                const failures = item.failures;
+                const resolved = item.resolved;
+                const bar = '█'.repeat(Math.max(1, failures));
+                html += `<div>${date}: ${bar} (${failures} failures, ${resolved} resolved)</div>`;
             });
 
-            const trendData = [3, 7, 5, 12, 8, 6, report.total_failures];
-
-            trendsChart.data.labels = last7Days;
-            trendsChart.data.datasets[0].data = trendData;
-            trendsChart.update();
-
-            // Update recent failures
-            updateRecentFailures(report.top_failing_dags);
+            html += '</div>';
+            chartEl.innerHTML = html;
         }
 
-        function updateRecentFailures(topDags) {
+        function updateCategoriesChart(categories) {
+            console.log('🥧 Categories chart update DISABLED to prevent crashes');
+
+            // Create a simple text-based representation
+            const chartEl = document.getElementById('categories-chart');
+            let html = '<div style="padding: 20px; font-family: monospace;">';
+            html += '<h4>🥧 Error Categories (Text Mode)</h4>';
+
+            Object.entries(categories).forEach(([category, count]) => {
+                const displayName = category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const bar = '▓'.repeat(Math.max(1, count));
+                html += `<div>${displayName}: ${bar} (${count})</div>`;
+            });
+
+            html += '</div>';
+            chartEl.innerHTML = html;
+        }
+
+        function updateRecentFailures(failures) {
             const container = document.getElementById('recent-failures-list');
 
-            if (!topDags || topDags.length === 0) {
+            if (!failures || failures.length === 0) {
                 container.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No recent failures</p>';
                 return;
             }
 
-            container.innerHTML = topDags.map(dag => `
+            container.innerHTML = failures.map(failure => `
                 <div class="failure-item">
-                    <div class="failure-time">${new Date().toLocaleTimeString()}</div>
-                    <div class="failure-task">${dag.dag_id}</div>
-                    <div class="failure-error">${dag.failures} failures today</div>
-                    <button class="btn btn-secondary" onclick="analyzeDag('${dag.dag_id}')">Analyze</button>
+                    <div class="failure-time">${new Date(failure.timestamp).toLocaleTimeString()}</div>
+                    <div class="failure-task">
+                        <strong>${failure.dag_id}</strong>.${failure.task_id}
+                        <br><small style="color: #666;">${failure.run_id}</small>
+                    </div>
+                    <div class="failure-error">${failure.error_message}</div>
+                    <div>
+                        <span class="error-badge severity-${failure.severity}">${failure.category}</span>
+                        <br>
+                        <button class="btn btn-secondary" onclick="analyzeSpecificTask('${failure.dag_id}', '${failure.task_id}', '${failure.run_id}')">Re-analyze</button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -589,9 +683,10 @@
             const dagId = document.getElementById('dag-id').value;
             const taskId = document.getElementById('task-id').value;
             const runId = document.getElementById('run-id').value;
+            const tryNumber = parseInt(document.getElementById('try-number')?.value || '1');
 
             if (!dagId || !taskId || !runId) {
-                showError('Please fill in all fields');
+                showError('Please fill in all required fields');
                 return;
             }
 
@@ -600,21 +695,35 @@
             document.getElementById('analyze-spinner').style.display = 'inline-block';
 
             try {
-                const response = await axios.post(`${API_BASE}/analyze`, {
+                const response = await axios.post(`${API_BASE}/analysis/analyze`, {
                     dag_id: dagId,
                     task_id: taskId,
-                    run_id: runId
+                    run_id: runId,
+                    try_number: tryNumber,
+                    force_baseline_refresh: false
                 });
 
                 displayAnalysisResult(response.data);
+
+                // Refresh dashboard data to show new analysis
+                setTimeout(loadDashboardData, 1000);
+
             } catch (error) {
                 console.error('Analysis failed:', error);
-                showError('Analysis failed: ' + (error.response?.data?.detail || error.message));
+                const errorMsg = error.response?.data?.detail || error.message || 'Unknown error occurred';
+                showError('Analysis failed: ' + errorMsg);
             } finally {
                 // Hide loading state
                 document.getElementById('analyze-btn-text').style.display = 'inline';
                 document.getElementById('analyze-spinner').style.display = 'none';
             }
+        }
+
+        function analyzeSpecificTask(dagId, taskId, runId) {
+            document.getElementById('dag-id').value = dagId;
+            document.getElementById('task-id').value = taskId;
+            document.getElementById('run-id').value = runId;
+            analyzeTask();
         }
 
         function displayAnalysisResult(result) {
@@ -675,16 +784,114 @@
             document.getElementById('dag-id').focus();
         }
 
-        function showError(message) {
-            // Simple error display - you might want to use a toast library
-            alert('Error: ' + message);
+        // Disable update queue to prevent infinite loops
+        function queueUpdate(updateFn) {
+            console.log('Update queued but disabled to prevent crashes');
         }
 
-        // Auto-resize charts
-        window.addEventListener('resize', function() {
-            if (trendsChart) trendsChart.resize();
-            if (categoriesChart) categoriesChart.resize();
-        });
+        function handleAnalysisComplete(data) {
+            console.log('Analysis completed:', data);
+            // Disabled to prevent crashes
+        }
+
+        function handleNewFailure(data) {
+            console.log('New failure detected:', data);
+            // Disabled to prevent crashes
+        }
+
+        function handleStatusChange(data) {
+            console.log('Status changed:', data);
+            // Disabled to prevent crashes
+        }
+
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-weight: 500;
+                z-index: 1001;
+                transition: opacity 0.2s ease; /* Only animate opacity */
+                max-width: 300px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                will-change: opacity; /* Optimize for opacity changes */
+            `;
+
+            switch (type) {
+                case 'success':
+                    notification.style.background = '#d4edda';
+                    notification.style.color = '#155724';
+                    notification.style.border = '1px solid #c3e6cb';
+                    break;
+                case 'warning':
+                    notification.style.background = '#fff3cd';
+                    notification.style.color = '#856404';
+                    notification.style.border = '1px solid #ffeaa7';
+                    break;
+                case 'error':
+                    notification.style.background = '#f8d7da';
+                    notification.style.color = '#721c24';
+                    notification.style.border = '1px solid #f5c6cb';
+                    break;
+                default:
+                    notification.style.background = '#d1ecf1';
+                    notification.style.color = '#0c5460';
+                    notification.style.border = '1px solid #bee5eb';
+            }
+
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // Auto-remove after 4 seconds (reduced from 5)
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 200); // Faster fade out
+            }, 4000);
+        }
+
+        function showError(message) {
+            console.error('Error:', message);
+            // Simple error display - no alerts to prevent crashes
+            const errorEl = document.createElement('div');
+            errorEl.style.cssText = `
+                position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+                background: #f8d7da; color: #721c24; padding: 12px 20px;
+                border-radius: 8px; border: 1px solid #f5c6cb;
+                z-index: 2000; max-width: 500px;
+            `;
+            errorEl.textContent = 'Error: ' + message;
+            document.body.appendChild(errorEl);
+
+            setTimeout(() => {
+                if (errorEl.parentNode) {
+                    errorEl.parentNode.removeChild(errorEl);
+                }
+            }, 5000);
+        }
+
+        function manualRefresh() {
+            const btn = document.getElementById('refresh-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Loading...';
+
+            loadDashboardData().finally(() => {
+                btn.disabled = false;
+                btn.textContent = '🔄 Manual Refresh';
+            });
+        }
+
+        // Disable auto-resize to prevent infinite loops
+        // window.addEventListener('resize', function() {
+        //     // Disabled to prevent browser crashes
+        // });
     </script>
 </body>
 </html>

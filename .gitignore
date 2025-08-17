@@ -39,3 +39,4 @@ data/*
 .secrets.*
 
 !.vscode/example*
+*.db

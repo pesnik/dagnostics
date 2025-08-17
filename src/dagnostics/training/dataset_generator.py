@@ -13,13 +13,6 @@ from typing import Dict, List, Tuple
 
 from pydantic import BaseModel
 
-try:
-    import pandas  # noqa: F401
-
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-
 logger = logging.getLogger(__name__)
 
 
@@ -36,34 +29,132 @@ class DatasetGenerator:
     """Generate training datasets from user feedback and logs"""
 
     def __init__(
-        self,
-        raw_data_path: str = "data/training_data.jsonl",
-        feedback_data_path: str = "data/feedback_data.jsonl",
-        output_dir: str = "data/training",
+        self, output_dir: str = "data/training", analyzer=None, feedback_candidates=None
     ):
-        self.raw_data_path = Path(raw_data_path)
-        self.feedback_data_path = Path(feedback_data_path)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
+        self.analyzer = analyzer
+        self.feedback_candidates = feedback_candidates or []
 
-    def load_raw_training_data(self) -> List[Dict]:
-        """Load existing training data from JSONL"""
+    def get_failed_tasks_data(self, ndays: int = 1) -> List[Dict]:
+        """Generate raw training data from live Airflow failed tasks"""
+        if not self.analyzer:
+            logger.warning("No analyzer provided, returning empty dataset")
+            return []
+
         examples = []
-        if self.raw_data_path.exists():
-            with open(self.raw_data_path, "r") as f:
-                for line in f:
-                    examples.append(json.loads(line.strip()))
-        logger.info(f"Loaded {len(examples)} raw training examples")
+        try:
+            # Get failed tasks from Airflow directly
+            failed_tasks = self.analyzer.airflow_client.get_failed_tasks(
+                ndays * 24 * 60
+            )
+
+            if not failed_tasks:
+                logger.info("No failed tasks found in Airflow")
+                return []
+
+            logger.info(f"Found {len(failed_tasks)} failed tasks from Airflow")
+
+            for task in failed_tasks:
+                try:
+                    # Get task tries
+                    task_tries = self.analyzer.airflow_client.get_task_tries(
+                        task.dag_id, task.task_id, task.run_id
+                    )
+
+                    # Filter failed tries
+                    failed_tries = [
+                        try_instance
+                        for try_instance in task_tries
+                        if try_instance.state == "failed"
+                        and try_instance.try_number > 0
+                    ]
+
+                    for failed_try in failed_tries:
+                        try:
+                            # Extract error using your existing method
+                            _, candidates, error_message = (
+                                self.analyzer.extract_task_error_for_sms(
+                                    failed_try.dag_id,
+                                    failed_try.task_id,
+                                    failed_try.run_id,
+                                    failed_try.try_number,
+                                )
+                            )
+
+                            if candidates and error_message:
+                                error_logs = "\n".join(
+                                    [error.message for error in candidates]
+                                )
+                                examples.append(
+                                    {
+                                        "candidates": error_logs,
+                                        "error": error_message,
+                                        "dag_id": failed_try.dag_id,
+                                        "task_id": failed_try.task_id,
+                                        "run_id": failed_try.run_id,
+                                        "try_number": failed_try.try_number,
+                                    }
+                                )
+
+                        except Exception as e:
+                            logger.warning(
+                                f"Error processing try {failed_try.try_number}: {e}"
+                            )
+                            continue
+
+                except Exception as e:
+                    logger.warning(
+                        f"Error processing task {task.dag_id}.{task.task_id}: {e}"
+                    )
+                    continue
+
+        except Exception as e:
+            logger.error(f"Error fetching failed tasks: {e}")
+
+        logger.info(f"Generated {len(examples)} training examples from live data")
         return examples
 
-    def load_feedback_data(self) -> List[Dict]:
-        """Load user feedback corrections"""
+    def get_feedback_data(self) -> List[Dict]:
+        """Get feedback data from web UI candidates"""
         feedback = []
-        if self.feedback_data_path.exists():
-            with open(self.feedback_data_path, "r") as f:
-                for line in f:
-                    feedback.append(json.loads(line.strip()))
-        logger.info(f"Loaded {len(feedback)} feedback examples")
+
+        for candidate in self.feedback_candidates:
+            # Only include reviewed candidates with human corrections
+            if candidate.get("status") in [
+                "approved",
+                "rejected",
+                "modified",
+            ] and candidate.get("human_category"):
+                feedback.append(
+                    {
+                        "log_context": candidate.get("raw_logs", ""),
+                        "original_error": candidate.get("error_message", ""),
+                        "corrected_analysis": {
+                            "error_message": candidate.get("error_message", ""),
+                            "category": candidate.get("human_category")
+                            or candidate.get("llm_category"),
+                            "severity": candidate.get("human_severity")
+                            or candidate.get("llm_severity"),
+                            "confidence": (
+                                1.0 if candidate.get("status") == "approved" else 0.9
+                            ),
+                            "reasoning": candidate.get("human_feedback")
+                            or "Human correction",
+                            "error_lines": [candidate.get("error_message", "")],
+                        },
+                        "user_id": candidate.get("reviewed_by", "web_annotator"),
+                        "confidence_rating": (
+                            1.0 if candidate.get("status") == "approved" else 0.9
+                        ),
+                        "dag_id": candidate.get("dag_id", "unknown"),
+                        "task_id": candidate.get("task_id", "unknown"),
+                        "run_id": candidate.get("run_id", "unknown"),
+                        "feedback_type": candidate.get("status"),
+                    }
+                )
+
+        logger.info(f"Generated {len(feedback)} feedback examples from web UI")
         return feedback
 
     def create_instruction_dataset(self) -> List[TrainingExample]:
@@ -83,8 +174,8 @@ class DatasetGenerator:
 
         examples = []
 
-        # Process raw training data
-        raw_data = self.load_raw_training_data()
+        # Process raw training data from live Airflow
+        raw_data = self.get_failed_tasks_data()
         for item in raw_data:
             # Create structured training example
             log_context = item.get("candidates", "")
@@ -107,7 +198,7 @@ class DatasetGenerator:
             examples.append(example)
 
         # Process user feedback corrections
-        feedback_data = self.load_feedback_data()
+        feedback_data = self.get_feedback_data()
         for item in feedback_data:
             log_context = item.get("log_context", "")
             corrected_analysis = item.get("corrected_analysis", {})

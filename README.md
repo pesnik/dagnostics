@@ -25,7 +25,7 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 ---
 
 ## System Architecture
-![System Architecture](docs/system_architecture.png)
+![System Architecture](docs/system_architecture.svg)
 ---
 
 ## 🛠 Tech Stack
@@ -72,13 +72,19 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 
 ```bash
 cd dagnostics
-# Basic installation
+# Basic installation (web dashboard only)
 uv sync
+
+# With LLM providers for full analysis
+uv sync --extra llm
+
+# With web dashboard (minimal)
+uv sync --extra web
 
 # With development dependencies
 uv sync --extra dev
 
-# With fine-tuning dependencies
+# With fine-tuning dependencies (heavy ML libraries)
 uv sync --extra finetuning
 
 # With all optional dependencies
@@ -88,18 +94,31 @@ uv sync --extra all
 ### Option 2: Using pip
 
 ```bash
-# Basic installation
+# Basic installation (web dashboard only)
 pip install dagnostics
+
+# With LLM providers for full analysis
+pip install dagnostics[llm]
+
+# With web dashboard (minimal)
+pip install dagnostics[web]
 
 # With development dependencies
 pip install dagnostics[dev]
 
-# With fine-tuning dependencies
+# With fine-tuning dependencies (heavy ML libraries)
 pip install dagnostics[finetuning]
 
 # With all optional dependencies
 pip install dagnostics[all]
 ```
+
+### 💡 **Dependency Recommendations:**
+
+- **🚀 Web Dashboard Only:** `pip install dagnostics[web]` - Minimal dependencies, fast installation
+- **🧠 Full Analysis:** `pip install dagnostics[llm]` - Includes LLM providers for error analysis
+- **🔬 Research/Training:** `pip install dagnostics[finetuning]` - Heavy ML libraries for model training
+- **👨‍💻 Development:** `pip install dagnostics[dev]` - Testing and linting tools
 
 ### Setup Steps
 

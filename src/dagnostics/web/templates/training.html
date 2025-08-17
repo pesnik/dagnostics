@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAGnostics - Training Dataset Creator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.5.0/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 120px;
+        }
+
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .control-group select, .control-group input {
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: white;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+
+        .candidates-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .candidate-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            color: #e0e0e0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .candidate-card:hover {
+            border-color: #555;
+        }
+
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+        }
+
+        .candidate-id {
+            font-size: 0.75rem;
+            color: #888;
+            font-family: 'Courier New', monospace;
+        }
+
+        .candidate-status {
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            font-weight: normal;
+            text-transform: uppercase;
+            font-family: 'Courier New', monospace;
+        }
+
+        .status-pending {
+            background: #2d3748;
+            color: #fbb040;
+            border: 1px solid #fbb040;
+        }
+
+        .status-approved {
+            background: #2d3748;
+            color: #68d391;
+            border: 1px solid #68d391;
+        }
+
+        .status-rejected {
+            background: #2d3748;
+            color: #f56565;
+            border: 1px solid #f56565;
+        }
+
+        .status-modified {
+            background: #2d3748;
+            color: #63b3ed;
+            border: 1px solid #63b3ed;
+        }
+
+        .candidate-task {
+            font-size: 0.9rem;
+            font-weight: normal;
+            color: #68d391;
+            margin-bottom: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .candidate-error {
+            background: #2d1b1b;
+            border-left: 2px solid #f56565;
+            padding: 8px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            line-height: 1.3;
+            max-height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #f56565;
+        }
+
+        .raw-logs {
+            background: #0f0f0f;
+            color: #c7c7c7;
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            line-height: 1.3;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            color: #888;
+        }
+
+        .logs-toggle {
+            background: #333;
+            color: #ccc;
+            border: 1px solid #555;
+            padding: 3px 8px;
+            border-radius: 2px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+
+        .logs-toggle:hover {
+            background: #555;
+        }
+
+        .logs-collapsed {
+            max-height: 100px;
+        }
+
+        .logs-expanded {
+            max-height: 600px;
+        }
+
+        .error-highlight {
+            background: rgba(220, 53, 69, 0.1);
+            border-left: 3px solid #dc3545;
+            padding: 2px 5px;
+            margin: 2px 0;
+            display: block;
+        }
+
+        .critical-error {
+            background: rgba(220, 53, 69, 0.2);
+            border-left: 4px solid #dc3545;
+            padding: 4px 8px;
+            margin: 2px 0;
+            display: block;
+            font-weight: bold;
+        }
+
+        .warning-line {
+            background: rgba(255, 193, 7, 0.1);
+            border-left: 2px solid #ffc107;
+            padding: 2px 5px;
+            margin: 1px 0;
+            display: block;
+        }
+
+        .llm-analysis {
+            background: #1a1a2e;
+            border-left: 2px solid #4a90e2;
+            padding: 8px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .llm-analysis h4 {
+            color: #4a90e2;
+            margin-bottom: 5px;
+            font-size: 0.8rem;
+            font-weight: normal;
+        }
+
+        .analysis-labels {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .label-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .category-resource_error { background: #fee; color: #c33; }
+        .category-data_quality { background: #fef5e7; color: #c85400; }
+        .category-dependency_failure { background: #fff3cd; color: #856404; }
+        .category-timeout_error { background: #d1ecf1; color: #0c5460; }
+        .category-unknown { background: #e2e3e5; color: #383d41; }
+
+        .severity-critical { background: #fee; color: #c33; }
+        .severity-high { background: #fef5e7; color: #c85400; }
+        .severity-medium { background: #fff3cd; color: #856404; }
+        .severity-low { background: #d1ecf1; color: #0c5460; }
+
+        .confidence-score {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .feedback-form {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .feedback-form.active {
+            display: block;
+        }
+
+        .feedback-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group select, .form-group textarea, .form-group input {
+            padding: 10px;
+            border: 2px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .form-group textarea {
+            min-height: 60px;
+            resize: vertical;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .export-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .export-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(102, 126, 234, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #fff;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #f5c6cb;
+            margin: 15px 0;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #c3e6cb;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .candidate-header {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Training Dataset Creator</h1>
+            <p>Review LLM error classifications and build high-quality training datasets</p>
+
+            <!-- Stats -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="total-candidates">--</div>
+                    <div class="stat-label">Total Candidates</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="pending-review">--</div>
+                    <div class="stat-label">Pending Review</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="approved-count">--</div>
+                    <div class="stat-label">Approved</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="accuracy-rate">--</div>
+                    <div class="stat-label">LLM Accuracy</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <div class="control-group">
+                <label for="status-filter">Status Filter</label>
+                <select id="status-filter">
+                    <option value="">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="modified">Modified</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="category-filter">Category Filter</label>
+                <select id="category-filter">
+                    <option value="">All Categories</option>
+                    <option value="resource_error">Resource Error</option>
+                    <option value="data_quality">Data Quality</option>
+                    <option value="dependency_failure">Dependency Failure</option>
+                    <option value="timeout_error">Timeout Error</option>
+                    <option value="unknown">Unknown</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="severity-filter">Severity Filter</label>
+                <select id="severity-filter">
+                    <option value="">All Severities</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="loadCandidates()">
+                <span id="load-btn-text">🔄 Refresh</span>
+                <span id="load-spinner" class="loading hidden"></span>
+            </button>
+        </div>
+
+        <!-- Data Loading Section -->
+        <div class="controls" style="border-top: 1px solid #333; padding-top: 15px; margin-top: 15px;">
+            <div class="control-group">
+                <label for="start-date">From Date</label>
+                <input type="date" id="start-date" style="padding: 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
+            </div>
+            <div class="control-group">
+                <label for="end-date">To Date</label>
+                <input type="date" id="end-date" style="padding: 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
+            </div>
+            <div class="control-group">
+                <label for="dag-filter">DAG Filter (Optional)</label>
+                <input type="text" id="dag-filter" placeholder="dag_name_pattern" style="padding: 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
+            </div>
+            <button class="btn btn-secondary" onclick="loadLiveAirflowData()">
+                📡 Load Live Airflow Data
+            </button>
+        </div>
+
+        <!-- ML Pipeline Section -->
+        <div class="controls" style="border-top: 1px solid #333; padding-top: 15px; margin-top: 15px;">
+            <button class="btn btn-warning" onclick="analyzeAllCandidates()">
+                🤖 Run LLM Analysis
+            </button>
+            <button class="btn btn-success" onclick="showDatasetModal()">
+                📊 Generate ML Dataset
+            </button>
+            <button class="btn btn-danger" onclick="showTrainingModal()">
+                🚀 Start Model Training
+            </button>
+        </div>
+
+        <!-- Export Section -->
+        <div class="export-section">
+            <h3>📥 Export Training Dataset</h3>
+            <div class="export-controls">
+                <div class="control-group">
+                    <label for="export-format">Format</label>
+                    <select id="export-format">
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV</option>
+                        <option value="jsonl">JSON Lines</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="include-rejected"> Include Rejected
+                    </label>
+                </div>
+                <div class="control-group">
+                    <label for="confidence-threshold">Min Confidence</label>
+                    <input type="number" id="confidence-threshold" min="0" max="1" step="0.1" value="0.0">
+                </div>
+                <button class="btn btn-primary" onclick="exportDataset()">
+                    📥 Export Dataset
+                </button>
+            </div>
+        </div>
+
+        <!-- Candidates Section -->
+        <div class="candidates-section">
+            <h3>📋 Error Candidates</h3>
+            <div id="candidates-container">
+                <!-- Candidates will be loaded here -->
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <!-- Pagination controls will be added here -->
+            </div>
+        </div>
+
+        <!-- Dataset Generation Modal -->
+        <div id="datasetModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeDatasetModal()">&times;</span>
+                <h2>📊 Generate ML Dataset</h2>
+                <p style="margin-bottom: 20px;">Configure dataset generation parameters:</p>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Date Range for Live Data:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <input type="date" id="dataset-start-date" style="padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                        <input type="date" id="dataset-end-date" style="padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>DAG Pattern Filter (Optional):</label>
+                    <input type="text" id="dataset-dag-pattern" placeholder="e.g., etl_*, data_pipeline_*" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Include Web Feedback:</label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="include-web-feedback" checked>
+                        Use human annotations from this session
+                    </label>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Dataset Split:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>
+                            <label>Train %:</label>
+                            <input type="number" id="train-split" value="80" min="60" max="90" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                        </div>
+                        <div>
+                            <label>Val %:</label>
+                            <input type="number" id="val-split" value="20" min="10" max="40" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="generateMLDataset()">Generate Dataset</button>
+                    <button class="btn btn-secondary" onclick="closeDatasetModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Training Modal -->
+        <div id="trainingModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeTrainingModal()">&times;</span>
+                <h2>🚀 Start Model Training</h2>
+                <p style="margin-bottom: 20px;">Configure fine-tuning parameters:</p>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Base Model:</label>
+                    <select id="model-name" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                        <option value="microsoft/DialoGPT-small">DialoGPT-small (Fast)</option>
+                        <option value="microsoft/DialoGPT-medium">DialoGPT-medium (Balanced)</option>
+                        <option value="distilbert-base-uncased">DistilBERT-base (Lightweight)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Training Epochs:</label>
+                    <input type="number" id="num-epochs" value="3" min="1" max="10" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Learning Rate:</label>
+                    <input type="number" id="learning-rate" value="0.0002" step="0.0001" min="0.00001" max="0.01" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label>Batch Size:</label>
+                    <input type="number" id="batch-size" value="2" min="1" max="8" style="width: 100%; padding: 8px; background: #333; color: #fff; border: 1px solid #555;">
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="startModelTraining()">Start Training</button>
+                    <button class="btn btn-secondary" onclick="closeTrainingModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8000/api/v1';
+        let currentPage = 0;
+        const pageSize = 10;
+        let currentFilters = {};
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadCandidates();
+
+            // Set default dates
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            document.getElementById('start-date').value = yesterday.toISOString().split('T')[0];
+            document.getElementById('end-date').value = today.toISOString().split('T')[0];
+            document.getElementById('dataset-start-date').value = yesterday.toISOString().split('T')[0];
+            document.getElementById('dataset-end-date').value = today.toISOString().split('T')[0];
+        });
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await axios.get(`${API_BASE}/training/stats`);
+                const stats = response.data;
+
+                document.getElementById('total-candidates').textContent = stats.total_candidates;
+                document.getElementById('pending-review').textContent = stats.pending_review;
+                document.getElementById('approved-count').textContent = stats.approved;
+                document.getElementById('accuracy-rate').textContent = (stats.accuracy_rate * 100).toFixed(1) + '%';
+
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+                showError('Failed to load statistics');
+            }
+        }
+
+        // Load candidates
+        async function loadCandidates() {
+            try {
+                showLoading(true);
+
+                // Get current filters
+                const status = document.getElementById('status-filter').value;
+                const category = document.getElementById('category-filter').value;
+                const severity = document.getElementById('severity-filter').value;
+
+                const params = new URLSearchParams({
+                    limit: pageSize,
+                    offset: currentPage * pageSize
+                });
+
+                if (status) params.append('status', status);
+                if (category) params.append('category', category);
+                if (severity) params.append('severity', severity);
+
+                const response = await axios.get(`${API_BASE}/training/candidates?${params}`);
+                const candidates = response.data;
+
+                renderCandidates(candidates);
+
+            } catch (error) {
+                console.error('Failed to load candidates:', error);
+                showError('Failed to load candidates. Make sure the API server is running.');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Render candidates
+        function renderCandidates(candidates) {
+            const container = document.getElementById('candidates-container');
+
+            if (candidates.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 40px; color: #666;">No candidates found. Generate some sample data to get started.</p>';
+                return;
+            }
+
+            container.innerHTML = candidates.map(candidate => `
+                <div class="candidate-card" data-id="${candidate.id}">
+                    <div class="candidate-header">
+                        <div>
+                            <div class="candidate-task">${candidate.dag_id}.${candidate.task_id}</div>
+                            <div class="candidate-id">${candidate.id}</div>
+                        </div>
+                        <div class="candidate-status status-${candidate.status}">
+                            ${candidate.status}
+                        </div>
+                    </div>
+
+                    <div class="candidate-error">
+                        ERROR: ${candidate.error_message}
+                    </div>
+
+                    <div class="logs-header">
+                        <span style="font-size: 0.75rem;">--- airflow logs ---</span>
+                        <button class="logs-toggle" onclick="toggleLogs('${candidate.id}')">
+                            <span id="toggle-text-${candidate.id}">[show]</span>
+                        </button>
+                    </div>
+                    <div class="raw-logs logs-collapsed" id="raw-logs-${candidate.id}">
+                        ${formatLogs(candidate.raw_logs, candidate.error_message)}
+                    </div>
+
+                    ${candidate.llm_category ? `
+                    <div class="llm-analysis">
+                        <h4>--- llm prediction ---</h4>
+                        <div style="color: #ccc; font-size: 0.75rem;">
+                            category: ${candidate.llm_category}<br>
+                            severity: ${candidate.llm_severity}<br>
+                            confidence: ${candidate.llm_confidence ? (candidate.llm_confidence * 100).toFixed(1) + '%' : 'N/A'}
+                            ${candidate.llm_reasoning ? `<br>reasoning: ${candidate.llm_reasoning}` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Human Feedback Section - Always Visible -->
+                    <div style="background: #1a2e1a; border-left: 2px solid #68d391; padding: 8px; margin: 8px 0; font-family: 'Courier New', monospace;">
+                        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 5px;">
+                            <h4 style="color: #68d391; margin: 0; font-size: 0.8rem; font-weight: normal;">--- human feedback ---</h4>
+                            <button class="btn btn-sm" style="background: #333; color: #ccc; border: 1px solid #555; padding: 2px 6px;" onclick="toggleFeedbackForm('${candidate.id}')">
+                                <span id="feedback-toggle-${candidate.id}">${candidate.human_category || candidate.human_feedback ? 'edit' : 'add'}</span>
+                            </button>
+                        </div>
+
+                        ${candidate.human_category || candidate.human_severity || candidate.human_feedback ? `
+                            <div style="color: #ccc; font-size: 0.75rem; margin-bottom: 8px;" id="feedback-display-${candidate.id}">
+                                ${candidate.human_category ? `category: ${candidate.human_category}<br>` : ''}
+                                ${candidate.human_severity ? `severity: ${candidate.human_severity}<br>` : ''}
+                                ${candidate.human_feedback ? `notes: ${candidate.human_feedback}<br>` : ''}
+                                ${candidate.reviewed_by ? `reviewer: ${candidate.reviewed_by}<br>` : ''}
+                                ${candidate.reviewed_at ? `reviewed: ${new Date(candidate.reviewed_at).toLocaleString()}<br>` : ''}
+                            </div>
+                        ` : `
+                            <div style="color: #888; font-size: 0.75rem; font-style: italic;" id="feedback-display-${candidate.id}">
+                                no human feedback yet
+                            </div>
+                        `}
+
+                        <!-- Feedback Form - Always Present but Hidden -->
+                        <div class="feedback-form" id="feedback-form-${candidate.id}" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Category</label>
+                                    <select id="human-category-${candidate.id}" style="background: #333; color: #fff; border: 1px solid #555;">
+                                        <option value="">Select category</option>
+                                        <option value="resource_error" ${candidate.human_category === 'resource_error' ? 'selected' : ''}>Resource Error</option>
+                                        <option value="data_quality" ${candidate.human_category === 'data_quality' ? 'selected' : ''}>Data Quality</option>
+                                        <option value="dependency_failure" ${candidate.human_category === 'dependency_failure' ? 'selected' : ''}>Dependency Failure</option>
+                                        <option value="timeout_error" ${candidate.human_category === 'timeout_error' ? 'selected' : ''}>Timeout Error</option>
+                                        <option value="unknown" ${candidate.human_category === 'unknown' ? 'selected' : ''}>Unknown</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Severity</label>
+                                    <select id="human-severity-${candidate.id}" style="background: #333; color: #fff; border: 1px solid #555;">
+                                        <option value="">Select severity</option>
+                                        <option value="critical" ${candidate.human_severity === 'critical' ? 'selected' : ''}>Critical</option>
+                                        <option value="high" ${candidate.human_severity === 'high' ? 'selected' : ''}>High</option>
+                                        <option value="medium" ${candidate.human_severity === 'medium' ? 'selected' : ''}>Medium</option>
+                                        <option value="low" ${candidate.human_severity === 'low' ? 'selected' : ''}>Low</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Feedback Notes</label>
+                                <textarea id="feedback-notes-${candidate.id}" placeholder="Explain your classification..." style="background: #333; color: #fff; border: 1px solid #555;">${candidate.human_feedback || ''}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Your Name</label>
+                                <input type="text" id="reviewer-name-${candidate.id}" placeholder="Enter your name" value="${candidate.reviewed_by || ''}" style="background: #333; color: #fff; border: 1px solid #555;">
+                            </div>
+                            <div style="display: flex; gap: 8px; margin-top: 10px;">
+                                <button class="btn btn-primary btn-sm" onclick="saveFeedback('${candidate.id}')">💾 Save</button>
+                                <button class="btn btn-secondary btn-sm" onclick="toggleFeedbackForm('${candidate.id}')">Cancel</button>
+                                ${candidate.human_category ? `<button class="btn btn-danger btn-sm" onclick="clearFeedback('${candidate.id}')">🗑️ Clear</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Action Buttons -->
+                    <div class="feedback-actions">
+                        ${candidate.llm_category ? `
+                            <button class="btn btn-success btn-sm" onclick="quickFeedback('${candidate.id}', 'approve')">✓ Approve LLM</button>
+                            <button class="btn btn-danger btn-sm" onclick="quickFeedback('${candidate.id}', 'reject')">✗ Reject LLM</button>
+                        ` : `
+                            <button class="btn btn-primary btn-sm" onclick="analyzeSingleCandidate('${candidate.id}')">🤖 Analyze with LLM</button>
+                        `}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Quick feedback (approve/reject)
+        async function quickFeedback(candidateId, action) {
+            try {
+                const response = await axios.post(`${API_BASE}/training/candidates/${candidateId}/feedback`, {
+                    candidate_id: candidateId,
+                    action: action,
+                    reviewer_name: 'Quick Review'
+                });
+
+                showSuccess(`Candidate ${action}ed successfully!`);
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error(`Failed to ${action} candidate:`, error);
+                showError(`Failed to ${action} candidate`);
+            }
+        }
+
+        // Toggle feedback form
+        function toggleFeedbackForm(candidateId) {
+            const form = document.getElementById(`feedback-form-${candidateId}`);
+            const toggleButton = document.getElementById(`feedback-toggle-${candidateId}`);
+
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                toggleButton.textContent = 'cancel';
+            } else {
+                form.style.display = 'none';
+                toggleButton.textContent = form.querySelector('#human-category-' + candidateId).value ? 'edit' : 'add';
+            }
+        }
+
+        // Save feedback (new unified function)
+        async function saveFeedback(candidateId) {
+            try {
+                const humanCategory = document.getElementById(`human-category-${candidateId}`).value;
+                const humanSeverity = document.getElementById(`human-severity-${candidateId}`).value;
+                const feedbackNotes = document.getElementById(`feedback-notes-${candidateId}`).value;
+                const reviewerName = document.getElementById(`reviewer-name-${candidateId}`).value;
+
+                if (!humanCategory && !humanSeverity && !feedbackNotes) {
+                    showError('Please provide at least category, severity, or feedback notes');
+                    return;
+                }
+
+                const response = await axios.post(`${API_BASE}/training/candidates/${candidateId}/feedback`, {
+                    candidate_id: candidateId,
+                    action: 'modify',
+                    human_category: humanCategory || null,
+                    human_severity: humanSeverity || null,
+                    feedback_notes: feedbackNotes || null,
+                    reviewer_name: reviewerName || 'Anonymous'
+                });
+
+                // Hide the form and update the toggle button
+                const form = document.getElementById(`feedback-form-${candidateId}`);
+                const toggleButton = document.getElementById(`feedback-toggle-${candidateId}`);
+                form.style.display = 'none';
+                toggleButton.textContent = 'edit';
+
+                showSuccess('Feedback saved successfully!');
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to save feedback:', error);
+                showError('Failed to save feedback');
+            }
+        }
+
+        // Clear feedback
+        async function clearFeedback(candidateId) {
+            try {
+                const response = await axios.post(`${API_BASE}/training/candidates/${candidateId}/feedback`, {
+                    candidate_id: candidateId,
+                    action: 'reject',
+                    human_category: null,
+                    human_severity: null,
+                    feedback_notes: null,
+                    reviewer_name: null
+                });
+
+                showSuccess('Feedback cleared!');
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to clear feedback:', error);
+                showError('Failed to clear feedback');
+            }
+        }
+
+        // Legacy function for compatibility
+        async function submitModification(candidateId) {
+            return await saveFeedback(candidateId);
+        }
+
+        // Export dataset
+        async function exportDataset() {
+            try {
+                const format = document.getElementById('export-format').value;
+                const includeRejected = document.getElementById('include-rejected').checked;
+                const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
+
+                const response = await axios.post(`${API_BASE}/training/export`, {
+                    format: format,
+                    include_rejected: includeRejected,
+                    confidence_threshold: confidenceThreshold > 0 ? confidenceThreshold : null
+                }, {
+                    responseType: 'blob'
+                });
+
+                // Create download link
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+                link.setAttribute('download', `training_dataset_${timestamp}.${format}`);
+
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                showSuccess(`Dataset exported successfully as ${format.toUpperCase()}!`);
+
+            } catch (error) {
+                console.error('Failed to export dataset:', error);
+                showError('Failed to export dataset');
+            }
+        }
+
+        // Load real data from JSONL file
+        async function loadRealData() {
+            try {
+                showSuccess('Loading data from training_data.jsonl...');
+
+                const response = await axios.post(`${API_BASE}/training/candidates/load-from-jsonl`, {}, {
+                    params: {
+                        limit: 50  // Load first 50 records
+                    }
+                });
+
+                showSuccess(`${response.data.message}! Ready for LLM analysis.`);
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to load real data:', error);
+                showError('Failed to load real data. Make sure training_data.jsonl exists.');
+            }
+        }
+
+        // Analyze all pending candidates with LLM
+        async function analyzeAllCandidates() {
+            try {
+                showSuccess('Running LLM analysis on all pending candidates...');
+
+                const response = await axios.post(`${API_BASE}/training/candidates/analyze-all`, {}, {
+                    params: {
+                        limit: 50
+                    }
+                });
+
+                showSuccess(`${response.data.message}! ${response.data.remaining_pending} candidates remaining.`);
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to analyze candidates:', error);
+                showError('Failed to run LLM analysis');
+            }
+        }
+
+        // Analyze single candidate with LLM
+        async function analyzeSingleCandidate(candidateId) {
+            try {
+                const response = await axios.post(`${API_BASE}/training/candidates/${candidateId}/analyze`);
+
+                showSuccess(`LLM analysis completed for candidate!`);
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to analyze candidate:', error);
+                showError('Failed to analyze candidate with LLM');
+            }
+        }
+
+        // Load live Airflow data for specific date range
+        async function loadLiveAirflowData() {
+            try {
+                const startDate = document.getElementById('start-date').value;
+                const endDate = document.getElementById('end-date').value;
+                const dagPattern = document.getElementById('dag-filter').value;
+
+                if (!startDate || !endDate) {
+                    showError('Please select both start and end dates');
+                    return;
+                }
+
+                showSuccess(`Loading failed tasks from ${startDate} to ${endDate}...`);
+
+                const response = await axios.post(`${API_BASE}/training/candidates/load-from-airflow`, {}, {
+                    params: {
+                        start_date: startDate,
+                        end_date: endDate,
+                        dag_pattern: dagPattern || undefined
+                    }
+                });
+
+                showSuccess(`Loaded ${response.data.created_count} failed tasks from Airflow!`);
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to load live Airflow data:', error);
+                showError('Failed to load Airflow data: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        // Show dataset generation modal
+        function showDatasetModal() {
+            document.getElementById('datasetModal').style.display = 'block';
+        }
+
+        // Close dataset modal
+        function closeDatasetModal() {
+            document.getElementById('datasetModal').style.display = 'none';
+        }
+
+        // Generate ML training dataset with parameters
+        async function generateMLDataset() {
+            try {
+                const startDate = document.getElementById('dataset-start-date').value;
+                const endDate = document.getElementById('dataset-end-date').value;
+                const dagPattern = document.getElementById('dataset-dag-pattern').value;
+                const includeWebFeedback = document.getElementById('include-web-feedback').checked;
+                const trainSplit = document.getElementById('train-split').value;
+
+                closeDatasetModal();
+                showSuccess('Generating ML training dataset from live data + feedback...');
+
+                const response = await axios.post(`${API_BASE}/training/generate-ml-dataset`, {}, {
+                    params: {
+                        start_date: startDate,
+                        end_date: endDate,
+                        dag_pattern: dagPattern || undefined,
+                        include_web_feedback: includeWebFeedback,
+                        train_split_percent: trainSplit
+                    }
+                });
+
+                const info = response.data.dataset_info;
+                showSuccess(`ML dataset generated! Train: ${info.train_size}, Val: ${info.validation_size} examples from ${response.data.live_airflow_days} days of data.`);
+
+            } catch (error) {
+                console.error('Failed to generate ML dataset:', error);
+                showError('Failed to generate ML dataset: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        // Show training modal
+        function showTrainingModal() {
+            document.getElementById('trainingModal').style.display = 'block';
+        }
+
+        // Close training modal
+        function closeTrainingModal() {
+            document.getElementById('trainingModal').style.display = 'none';
+        }
+
+        // Start model training
+        async function startModelTraining() {
+            try {
+                const modelName = document.getElementById('model-name').value;
+                const numEpochs = parseInt(document.getElementById('num-epochs').value);
+                const learningRate = parseFloat(document.getElementById('learning-rate').value);
+                const batchSize = parseInt(document.getElementById('batch-size').value);
+
+                closeTrainingModal();
+                showSuccess(`Starting model training with ${modelName}... This may take 10-30 minutes.`);
+
+                const response = await axios.post(`${API_BASE}/training/start-model-training`, {}, {
+                    params: {
+                        model_name: modelName,
+                        num_epochs: numEpochs,
+                        learning_rate: learningRate,
+                        batch_size: batchSize
+                    },
+                    timeout: 1800000 // 30 minutes
+                });
+
+                showSuccess(`Model training completed! Saved to: ${response.data.model_path}`);
+
+            } catch (error) {
+                console.error('Model training failed:', error);
+                showError('Model training failed: ' + (error.response?.data?.detail || error.message));
+            }
+        }
+
+        // Create sample data for testing
+        async function createSampleData() {
+            try {
+                const sampleData = [
+                    {
+                        dag_id: "etl_pipeline_1",
+                        task_id: "extract_data",
+                        run_id: "manual__2025-08-14T10:30:00",
+                        error_message: "Connection timeout to database server after 30 seconds",
+                        raw_logs: "ERROR - Connection failed: timeout exceeded\nDETAIL - Unable to establish connection to postgresql://...",
+                        category: "resource_error",
+                        severity: "high",
+                        confidence: 0.95,
+                        reasoning: "Clear database connection timeout error with specific timeout duration mentioned.",
+                        processing_time: 1.2
+                    },
+                    {
+                        dag_id: "data_ingestion",
+                        task_id: "validate_schema",
+                        run_id: "scheduled__2025-08-14T09:00:00",
+                        error_message: "Schema validation failed: missing required column 'customer_id'",
+                        raw_logs: "VALIDATION_ERROR - Required field missing\nEXPECTED - customer_id (string, not null)\nACTUAL - field not found",
+                        category: "data_quality",
+                        severity: "medium",
+                        confidence: 0.88,
+                        reasoning: "Data quality issue with specific missing column identified.",
+                        processing_time: 0.8
+                    },
+                    {
+                        dag_id: "reporting_job",
+                        task_id: "generate_report",
+                        run_id: "manual__2025-08-14T08:15:00",
+                        error_message: "OutOfMemoryError: Java heap space exceeded while processing large dataset",
+                        raw_logs: "java.lang.OutOfMemoryError: Java heap space\nat com.example.ReportGenerator.processData(ReportGenerator.java:145)",
+                        category: "resource_error",
+                        severity: "critical",
+                        confidence: 0.92,
+                        reasoning: "Clear memory resource exhaustion error with Java stack trace.",
+                        processing_time: 2.1
+                    },
+                    {
+                        dag_id: "api_sync",
+                        task_id: "fetch_external_data",
+                        run_id: "scheduled__2025-08-14T07:00:00",
+                        error_message: "HTTP 503 Service Unavailable: External API temporarily down",
+                        raw_logs: "requests.exceptions.HTTPError: 503 Server Error: Service Unavailable\nResponse: {\"error\": \"temporary maintenance\"}",
+                        category: "dependency_failure",
+                        severity: "medium",
+                        confidence: 0.85,
+                        reasoning: "External service dependency failure with temporary nature indicated.",
+                        processing_time: 1.5
+                    }
+                ];
+
+                const response = await axios.post(`${API_BASE}/training/candidates/bulk`, sampleData);
+
+                showSuccess(`Created ${response.data.created_count} sample candidates!`);
+                loadCandidates();
+                loadStats();
+
+            } catch (error) {
+                console.error('Failed to create sample data:', error);
+                showError('Failed to create sample data');
+            }
+        }
+
+        // Utility functions
+        function showLoading(show) {
+            const btnText = document.getElementById('load-btn-text');
+            const spinner = document.getElementById('load-spinner');
+
+            if (show) {
+                btnText.classList.add('hidden');
+                spinner.classList.remove('hidden');
+            } else {
+                btnText.classList.remove('hidden');
+                spinner.classList.add('hidden');
+            }
+        }
+
+        function showError(message) {
+            // Remove existing messages
+            document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
+
+            const errorEl = document.createElement('div');
+            errorEl.className = 'error-message';
+            errorEl.textContent = message;
+
+            document.querySelector('.header').appendChild(errorEl);
+
+            setTimeout(() => errorEl.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            // Remove existing messages
+            document.querySelectorAll('.error-message, .success-message').forEach(el => el.remove());
+
+            const successEl = document.createElement('div');
+            successEl.className = 'success-message';
+            successEl.textContent = message;
+
+            document.querySelector('.header').appendChild(successEl);
+
+            setTimeout(() => successEl.remove(), 5000);
+        }
+
+        // Format logs with error highlighting
+        function formatLogs(rawLogs, errorMessage) {
+            if (!rawLogs) return 'no logs available';
+
+            // Split logs into lines
+            let lines = rawLogs.split('\n');
+
+            // Define different levels of error indicators (simplified)
+            const criticalKeywords = ['FAILED', 'ERROR', 'Exception', 'Traceback', 'Fatal'];
+            const errorKeywords = ['error', 'failed', 'timeout', 'connection', 'TPT', 'denied', 'refused', 'not found'];
+
+            const formattedLines = lines.map((line, index) => {
+                const lowerLine = line.toLowerCase();
+
+                // Check for critical errors (highest priority)
+                const hasCritical = criticalKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase())) ||
+                                   (errorMessage && line.includes(errorMessage.substring(0, 40)));
+
+                // Check for regular errors
+                const hasError = errorKeywords.some(keyword => lowerLine.includes(keyword.toLowerCase()));
+
+                if (hasCritical) {
+                    return `<span style="color: #ff6b6b;">${escapeHtml(line)}</span>`;
+                } else if (hasError) {
+                    return `<span style="color: #feca57;">${escapeHtml(line)}</span>`;
+                } else {
+                    return escapeHtml(line);
+                }
+            });
+
+            return formattedLines.join('\n');
+        }
+
+        // Escape HTML for safe rendering
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Toggle logs expansion
+        function toggleLogs(candidateId) {
+            const logsDiv = document.getElementById(`raw-logs-${candidateId}`);
+            const toggleText = document.getElementById(`toggle-text-${candidateId}`);
+
+            if (logsDiv.classList.contains('logs-collapsed')) {
+                logsDiv.classList.remove('logs-collapsed');
+                logsDiv.classList.add('logs-expanded');
+                toggleText.textContent = '[hide]';
+            } else {
+                logsDiv.classList.remove('logs-expanded');
+                logsDiv.classList.add('logs-collapsed');
+                toggleText.textContent = '[show]';
+            }
+        }
+
+        // Event listeners for filters
+        document.getElementById('status-filter').addEventListener('change', loadCandidates);
+        document.getElementById('category-filter').addEventListener('change', loadCandidates);
+        document.getElementById('severity-filter').addEventListener('change', loadCandidates);
+    </script>
+</body>
+</html>
