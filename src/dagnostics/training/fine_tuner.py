@@ -289,7 +289,7 @@ class SLMFineTuner:
             gradient_accumulation_steps=2,
             optim="adamw_hf",
             num_train_epochs=num_epochs,
-            evaluation_strategy="steps" if eval_dataset else "no",
+            eval_strategy="steps" if eval_dataset else "no",
             eval_steps=100 if eval_dataset else None,
             logging_steps=10,
             save_steps=100,
