@@ -10,7 +10,7 @@ services:
       dockerfile: docker/Dockerfile.training
     container_name: dagnostics-training-server
     restart: unless-stopped
-    
+
     # GPU configuration
     deploy:
       resources:
@@ -19,57 +19,57 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    
+
     # Environment variables
     environment:
       # HuggingFace configuration
       - HF_HOME=/app/huggingface_cache
       - TRANSFORMERS_CACHE=/app/huggingface_cache
       - HF_TOKEN=${HF_TOKEN:-}  # Optional: for private models
-      
+
       # Training optimization
       - CUDA_VISIBLE_DEVICES=0  # Use first GPU
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-      
+
       # Logging
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=info
-    
+
     # Port mapping
     ports:
       - "8001:8001"
-    
+
     # Volume mounts for persistence
     volumes:
       # Model storage (persistent)
       - ./server_data/models:/app/server_data/models
-      
+
       # Dataset storage (persistent)
       - ./server_data/datasets:/app/server_data/datasets
-      
+
       # HuggingFace cache (persistent)
       - ./cache/huggingface:/app/huggingface_cache
-      
+
       # PyTorch cache (persistent)
       - ./cache/torch:/app/torch_cache
-      
+
       # Training data (bind mount)
       - ./data:/app/data
-      
+
       # Evaluation results (persistent)
       - ./evaluations:/app/evaluations
-      
+
       # Configuration files
       - ./config:/app/config:ro
-    
+
     # Resource limits
     ulimits:
       memlock: -1
       stack: 67108864
-    
+
     # Shared memory for PyTorch DataLoader
     shm_size: '2gb'
-    
+
     # Health check
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
@@ -77,7 +77,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    
+
     # Logging configuration
     logging:
       driver: "json-file"

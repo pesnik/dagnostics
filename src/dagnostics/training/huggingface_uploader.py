@@ -7,7 +7,6 @@ metadata, model cards, and Ollama compatibility.
 
 import json
 import logging
-import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -36,7 +35,7 @@ class HuggingFaceUploader:
         self.huggingface_hub = _import_optional_dependency(
             "huggingface_hub", "Install with: pip install huggingface_hub"
         )
-        
+
         # Initialize HF API
         if token:
             self.api = self.huggingface_hub.HfApi(token=token)
@@ -52,12 +51,12 @@ class HuggingFaceUploader:
         evaluation_results: Optional[Dict] = None,
     ) -> str:
         """Create a comprehensive model card"""
-        
+
         # Calculate training metrics
         total_params = training_info.get("total_parameters", 0)
         trainable_params = training_info.get("trainable_parameters", 0)
         efficiency = (trainable_params / total_params * 100) if total_params > 0 else 0
-        
+
         # Format evaluation metrics
         eval_section = ""
         if evaluation_results:
@@ -98,7 +97,11 @@ A fine-tuned language model specialized in ETL error analysis for telecom data p
 
 ## Model Description
 
-This model is a fine-tuned version of [{base_model}](https://huggingface.co/{base_model}) specifically optimized for analyzing Airflow ETL task failure logs in a telecom environment. It excels at extracting core error messages from verbose log data, focusing on critical technical issues while filtering out noise.
+This model is a fine-tuned version of [{base_model}](https://huggingface.co/
+{base_model}) specifically optimized for analyzing Airflow ETL task failure
+logs in a telecom environment. It excels at extracting core error messages
+from verbose log data, focusing on critical technical issues while filtering
+out noise.
 
 ### Model Details
 
@@ -260,7 +263,9 @@ For questions and support regarding this model, please open an issue in the [DAG
 
 ---
 
-*This model was trained using the DAGnostics fine-tuning infrastructure. For more information about DAGnostics, visit the [project documentation](https://github.com/your-org/dagnostics).*
+*This model was trained using the DAGnostics fine-tuning infrastructure.
+For more information about DAGnostics, visit the [project documentation]
+(https://github.com/your-org/dagnostics).*
 """
 
         return model_card
@@ -273,13 +278,13 @@ For questions and support regarding this model, please open an issue in the [DAG
         evaluation_results: Optional[Dict] = None,
     ) -> str:
         """Prepare a directory for HuggingFace upload"""
-        
+
         logger.info(f"Preparing upload directory for {model_name}")
-        
+
         # Create upload directory
         upload_dir = Path("uploads") / model_name.replace("/", "_")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Copy model files
         model_path_obj = Path(model_path)
         for file_path in model_path_obj.rglob("*"):
@@ -288,16 +293,16 @@ For questions and support regarding this model, please open an issue in the [DAG
                 target_path = upload_dir / relative_path
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(file_path, target_path)
-        
+
         # Create model card
         base_model = training_info.get("model_name", "unknown")
         model_card = self.create_model_card(
             model_name, base_model, training_info, evaluation_results
         )
-        
+
         with open(upload_dir / "README.md", "w") as f:
             f.write(model_card)
-        
+
         # Create .gitattributes for LFS
         gitattributes = """*.bin filter=lfs diff=lfs merge=lfs -text
 *.safetensors filter=lfs diff=lfs merge=lfs -text
@@ -307,10 +312,10 @@ For questions and support regarding this model, please open an issue in the [DAG
 *.ot filter=lfs diff=lfs merge=lfs -text
 *.onnx filter=lfs diff=lfs merge=lfs -text
 """
-        
+
         with open(upload_dir / ".gitattributes", "w") as f:
             f.write(gitattributes)
-        
+
         # Create training metadata
         metadata = {
             "training_info": training_info,
@@ -318,10 +323,10 @@ For questions and support regarding this model, please open an issue in the [DAG
             "upload_timestamp": datetime.now().isoformat(),
             "dagnostics_version": "0.5.0",
         }
-        
+
         with open(upload_dir / "training_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
-        
+
         logger.info(f"Upload directory prepared: {upload_dir}")
         return str(upload_dir)
 
@@ -335,14 +340,14 @@ For questions and support regarding this model, please open an issue in the [DAG
         commit_message: Optional[str] = None,
     ) -> str:
         """Upload model to HuggingFace Hub"""
-        
+
         logger.info(f"Uploading model to HuggingFace Hub: {repo_id}")
-        
+
         # Prepare upload directory
         upload_dir = self.prepare_upload_directory(
             model_path, repo_id, training_info, evaluation_results
         )
-        
+
         try:
             # Create repository if it doesn't exist
             try:
@@ -350,27 +355,33 @@ For questions and support regarding this model, please open an issue in the [DAG
                 logger.info(f"Repository created/verified: {repo_id}")
             except Exception as e:
                 logger.warning(f"Repository creation warning: {e}")
-            
+
             # Upload files
             if not commit_message:
                 commit_message = f"Upload DAGnostics fine-tuned model - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            
+
             self.api.upload_folder(
                 folder_path=upload_dir,
                 repo_id=repo_id,
                 commit_message=commit_message,
-                commit_description=f"Fine-tuned model for ETL error analysis\\n\\nTraining details:\\n- Base model: {training_info.get('model_name', 'unknown')}\\n- Training examples: {training_info.get('train_size', 'unknown')}\\n- Validation examples: {training_info.get('validation_size', 'unknown')}",
+                commit_description=(
+                    f"Fine-tuned model for ETL error analysis\\n\\n"
+                    f"Training details:\\n"
+                    f"- Base model: {training_info.get('model_name', 'unknown')}\\n"
+                    f"- Training examples: {training_info.get('train_size', 'unknown')}\\n"
+                    f"- Validation examples: {training_info.get('validation_size', 'unknown')}"
+                ),
             )
-            
+
             model_url = f"https://huggingface.co/{repo_id}"
             logger.info(f"Model uploaded successfully: {model_url}")
-            
+
             return model_url
-            
+
         except Exception as e:
             logger.error(f"Upload failed: {e}")
             raise
-        
+
         finally:
             # Cleanup upload directory
             if Path(upload_dir).exists():
@@ -378,7 +389,7 @@ For questions and support regarding this model, please open an issue in the [DAG
 
     def create_ollama_modelfile(self, model_path: str, model_name: str) -> str:
         """Create Ollama Modelfile for the uploaded model"""
-        
+
         modelfile_content = f"""FROM {model_name}
 
 PARAMETER temperature 0.1
@@ -412,12 +423,12 @@ Common error patterns you should recognize:
 
 Respond with just the extracted core error message.\"\"\"
 """
-        
+
         # Save Modelfile
         modelfile_path = Path(model_path) / "Modelfile.hf"
         with open(modelfile_path, "w") as f:
             f.write(modelfile_content)
-        
+
         logger.info(f"Ollama Modelfile created: {modelfile_path}")
         return str(modelfile_path)
 
@@ -432,7 +443,7 @@ def upload_to_huggingface(
 ) -> str:
     """
     Upload a fine-tuned model to HuggingFace Hub
-    
+
     Args:
         model_path: Path to the fine-tuned model
         repo_id: HuggingFace repository ID (e.g., "username/model-name")
@@ -440,13 +451,13 @@ def upload_to_huggingface(
         evaluation_results: Model evaluation results
         token: HuggingFace API token (optional, uses HF_TOKEN env var)
         private: Whether to create a private repository
-    
+
     Returns:
         URL of the uploaded model
     """
-    
+
     uploader = HuggingFaceUploader(token=token)
-    
+
     return uploader.upload_model(
         model_path=model_path,
         repo_id=repo_id,
@@ -459,15 +470,17 @@ def upload_to_huggingface(
 if __name__ == "__main__":
     # Example usage
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Upload model to HuggingFace Hub")
     parser.add_argument("model_path", help="Path to fine-tuned model")
     parser.add_argument("repo_id", help="HuggingFace repository ID")
-    parser.add_argument("--private", action="store_true", help="Create private repository")
+    parser.add_argument(
+        "--private", action="store_true", help="Create private repository"
+    )
     parser.add_argument("--token", help="HuggingFace API token")
-    
+
     args = parser.parse_args()
-    
+
     # Mock training info for standalone usage
     training_info = {
         "model_name": "microsoft/DialoGPT-small",
@@ -477,7 +490,7 @@ if __name__ == "__main__":
         "learning_rate": 2e-4,
         "batch_size": 2,
     }
-    
+
     try:
         url = upload_to_huggingface(
             model_path=args.model_path,
