@@ -505,5 +505,433 @@ def remote_download(
         raise typer.Exit(1)
 
 
+# New commands for enhanced fine-tuning capabilities
+
+
+@training_app.command("prepare-data")
+def prepare_training_data(
+    dataset_path: str = typer.Argument(
+        "data/training_dataset_2025-08-17T11-15-10.json",
+        help="Path to human-reviewed training dataset",
+    ),
+    output_dir: str = typer.Option(
+        "data/fine_tuning", help="Output directory for prepared datasets"
+    ),
+):
+    """Prepare fine-tuning datasets from human-reviewed data"""
+
+    console.print("[bold blue]Preparing fine-tuning datasets...[/bold blue]")
+
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    # Check if dataset exists
+    if not Path(dataset_path).exists():
+        console.print(f"[red]❌ Dataset not found: {dataset_path}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        # Run the data preparation script
+        result = subprocess.run(
+            [sys.executable, "scripts/prepare_training_data.py", dataset_path],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        console.print("[green]✅ Training datasets prepared successfully![/green]")
+        console.print(result.stdout)
+
+        # Show what was created
+        output_path = Path(output_dir)
+        if output_path.exists():
+            files = list(output_path.glob("*.jsonl"))
+            if files:
+                table = Table(title="Generated Datasets")
+                table.add_column("File", style="cyan")
+                table.add_column("Path", style="yellow")
+
+                for file in files:
+                    table.add_row(file.name, str(file))
+
+                console.print(table)
+
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]❌ Data preparation failed: {e.stderr}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Unexpected error: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@training_app.command("train-local")
+def train_local_model(
+    model_name: str = typer.Option(
+        "microsoft/DialoGPT-small", help="Base model to fine-tune"
+    ),
+    train_dataset: str = typer.Option(
+        "data/fine_tuning/train_dataset.jsonl", help="Training dataset path"
+    ),
+    val_dataset: str = typer.Option(
+        "data/fine_tuning/validation_dataset.jsonl", help="Validation dataset path"
+    ),
+    epochs: int = typer.Option(3, help="Number of training epochs"),
+    learning_rate: float = typer.Option(2e-4, help="Learning rate"),
+    batch_size: int = typer.Option(2, help="Training batch size"),
+    model_output_name: str = typer.Option(
+        "dagnostics-error-extractor", help="Output model name"
+    ),
+    use_quantization: bool = typer.Option(
+        True, help="Use 4-bit quantization for memory efficiency"
+    ),
+    export_for_ollama: bool = typer.Option(
+        True, help="Export model for Ollama after training"
+    ),
+):
+    """Fine-tune a local model using prepared datasets"""
+
+    _check_training_dependencies()
+
+    console.print(f"[bold blue]Fine-tuning local model: {model_name}[/bold blue]")
+
+    # Check if datasets exist
+    if not Path(train_dataset).exists():
+        console.print(f"[red]❌ Training dataset not found: {train_dataset}[/red]")
+        console.print("Run 'dagnostics training prepare-data' first")
+        raise typer.Exit(1)
+
+    try:
+        from dagnostics.training.fine_tuner import train_from_prepared_data
+
+        model_path = train_from_prepared_data(
+            model_name=model_name,
+            train_dataset_path=train_dataset,
+            validation_dataset_path=val_dataset,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+            model_output_name=model_output_name,
+            use_quantization=use_quantization,
+            export_for_ollama=export_for_ollama,
+        )
+
+        console.print("[green]✅ Local fine-tuning completed successfully![/green]")
+        console.print(f"[bold]Model saved to:[/bold] {model_path}")
+
+    except Exception as e:
+        console.print(f"[red]❌ Local fine-tuning failed: {e}[/red]")
+        logger.error(f"Local fine-tuning error: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
+@training_app.command("train-openai")
+def train_openai_model(
+    train_dataset: str = typer.Option(
+        "data/fine_tuning/train_dataset.jsonl", help="Training dataset path"
+    ),
+    val_dataset: str = typer.Option(
+        "data/fine_tuning/validation_dataset.jsonl", help="Validation dataset path"
+    ),
+    model: str = typer.Option("gpt-3.5-turbo", help="OpenAI base model"),
+    api_key: Optional[str] = typer.Option(
+        None, help="OpenAI API key (or set OPENAI_API_KEY env var)"
+    ),
+    suffix: str = typer.Option("dagnostics-error-extractor", help="Model name suffix"),
+    wait: bool = typer.Option(True, help="Wait for training completion"),
+):
+    """Fine-tune an OpenAI model using their API"""
+
+    console.print(f"[bold blue]Fine-tuning OpenAI model: {model}[/bold blue]")
+
+    # Check if datasets exist
+    if not Path(train_dataset).exists():
+        console.print(f"[red]❌ Training dataset not found: {train_dataset}[/red]")
+        console.print("Run 'dagnostics training prepare-data' first")
+        raise typer.Exit(1)
+
+    try:
+        from dagnostics.training.api_fine_tuner import fine_tune_openai
+
+        result = fine_tune_openai(
+            train_dataset_path=train_dataset,
+            validation_dataset_path=val_dataset if Path(val_dataset).exists() else None,
+            model=model,
+            api_key=api_key,
+            suffix=suffix,
+            wait_for_completion=wait,
+        )
+
+        if result["status"] == "succeeded":
+            console.print(
+                "[green]✅ OpenAI fine-tuning completed successfully![/green]"
+            )
+            console.print(
+                f"[bold]Fine-tuned model:[/bold] {result['fine_tuned_model']}"
+            )
+            console.print(f"[bold]Tokens trained:[/bold] {result['trained_tokens']:,}")
+        elif result["status"] == "running":
+            console.print(
+                f"[yellow]🔄 Training job submitted: {result['job_id']}[/yellow]"
+            )
+            console.print("Check status in OpenAI dashboard or wait for completion")
+        else:
+            console.print(
+                f"[red]❌ Training failed: {result.get('error', 'Unknown error')}[/red]"
+            )
+            raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(f"[red]❌ OpenAI fine-tuning failed: {e}[/red]")
+        logger.error(f"OpenAI fine-tuning error: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
+@training_app.command("train-anthropic")
+def train_anthropic_model(
+    train_dataset: str = typer.Option(
+        "data/fine_tuning/train_dataset.jsonl", help="Training dataset path"
+    ),
+    val_dataset: str = typer.Option(
+        "data/fine_tuning/validation_dataset.jsonl", help="Validation dataset path"
+    ),
+    model: str = typer.Option("claude-3-haiku-20240307", help="Anthropic base model"),
+    api_key: Optional[str] = typer.Option(
+        None, help="Anthropic API key (or set ANTHROPIC_API_KEY env var)"
+    ),
+):
+    """Prepare data for Anthropic fine-tuning (when available)"""
+
+    console.print(
+        f"[bold blue]Preparing Anthropic fine-tuning data for: {model}[/bold blue]"
+    )
+
+    # Check if datasets exist
+    if not Path(train_dataset).exists():
+        console.print(f"[red]❌ Training dataset not found: {train_dataset}[/red]")
+        console.print("Run 'dagnostics training prepare-data' first")
+        raise typer.Exit(1)
+
+    try:
+        from dagnostics.training.api_fine_tuner import fine_tune_anthropic
+
+        result = fine_tune_anthropic(
+            train_dataset_path=train_dataset,
+            validation_dataset_path=val_dataset if Path(val_dataset).exists() else None,
+            model=model,
+            api_key=api_key,
+        )
+
+        console.print("[green]✅ Anthropic data preparation completed![/green]")
+        console.print(f"[bold]Status:[/bold] {result['message']}")
+        console.print(f"[bold]Train dataset:[/bold] {result['train_dataset']}")
+        if result["validation_dataset"]:
+            console.print(
+                f"[bold]Validation dataset:[/bold] {result['validation_dataset']}"
+            )
+
+    except Exception as e:
+        console.print(f"[red]❌ Anthropic preparation failed: {e}[/red]")
+        logger.error(f"Anthropic preparation error: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
+@training_app.command("evaluate")
+def evaluate_model(
+    model_path: str = typer.Argument(..., help="Path to model to evaluate"),
+    test_dataset: str = typer.Option(
+        "data/fine_tuning/validation_dataset.jsonl", help="Test dataset path"
+    ),
+    model_type: str = typer.Option(
+        "local", help="Model type: local, openai, or anthropic"
+    ),
+    output_dir: str = typer.Option(
+        "evaluations", help="Output directory for evaluation results"
+    ),
+):
+    """Evaluate a fine-tuned model on test data"""
+
+    console.print(f"[bold blue]Evaluating {model_type} model: {model_path}[/bold blue]")
+
+    # Check if test dataset exists
+    if not Path(test_dataset).exists():
+        console.print(f"[red]❌ Test dataset not found: {test_dataset}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        from dagnostics.training.model_evaluator import evaluate_model as eval_model
+
+        results_path = eval_model(
+            model_path=model_path,
+            test_dataset_path=test_dataset,
+            model_type=model_type,
+            output_dir=output_dir,
+        )
+
+        console.print("[green]✅ Model evaluation completed![/green]")
+        console.print(f"[bold]Results saved to:[/bold] {results_path}")
+
+        # Show summary report path
+        report_path = Path(results_path).with_suffix(".md")
+        if report_path.exists():
+            console.print(f"[bold]Detailed report:[/bold] {report_path}")
+
+    except Exception as e:
+        console.print(f"[red]❌ Model evaluation failed: {e}[/red]")
+        logger.error(f"Model evaluation error: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
+@training_app.command("status")
+def show_training_status():
+    """Show training environment and dataset status"""
+
+    console.print("[bold blue]DAGnostics Training Status[/bold blue]")
+
+    # Check training dependencies
+    status_table = Table(title="Training Environment")
+    status_table.add_column("Component", style="cyan")
+    status_table.add_column("Status", style="green")
+    status_table.add_column("Details", style="yellow")
+
+    try:
+        _check_training_dependencies()
+        status_table.add_row(
+            "ML Dependencies", "✅ Available", "Ready for local training"
+        )
+    except typer.Exit:
+        status_table.add_row(
+            "ML Dependencies",
+            "❌ Missing",
+            "Install with: pip install 'dagnostics[finetuning]'",
+        )
+
+    # Check API keys
+    import os
+
+    openai_key = "✅ Set" if os.getenv("OPENAI_API_KEY") else "❌ Not set"
+    anthropic_key = "✅ Set" if os.getenv("ANTHROPIC_API_KEY") else "❌ Not set"
+
+    status_table.add_row("OpenAI API Key", openai_key, "For OpenAI fine-tuning")
+    status_table.add_row(
+        "Anthropic API Key", anthropic_key, "For Anthropic preparation"
+    )
+
+    console.print(status_table)
+
+    # Check datasets
+    dataset_table = Table(title="Available Datasets")
+    dataset_table.add_column("Dataset", style="cyan")
+    dataset_table.add_column("Status", style="green")
+    dataset_table.add_column("Path", style="yellow")
+
+    datasets = [
+        ("Human-reviewed data", "data/training_dataset_2025-08-17T11-15-10.json"),
+        ("Training set", "data/fine_tuning/train_dataset.jsonl"),
+        ("Validation set", "data/fine_tuning/validation_dataset.jsonl"),
+        ("Full dataset", "data/fine_tuning/full_dataset.jsonl"),
+    ]
+
+    for name, path in datasets:
+        status = "✅ Available" if Path(path).exists() else "❌ Missing"
+        dataset_table.add_row(name, status, path)
+
+    console.print(dataset_table)
+
+    # Show next steps
+    console.print("\n[bold yellow]Next Steps:[/bold yellow]")
+    if not Path("data/fine_tuning/train_dataset.jsonl").exists():
+        console.print(
+            "1. Prepare training data: [cyan]dagnostics training prepare-data[/cyan]"
+        )
+    else:
+        console.print("1. ✅ Training data ready")
+
+    console.print("2. Choose training method:")
+    console.print("   • Local: [cyan]dagnostics training train-local[/cyan]")
+    console.print("   • OpenAI: [cyan]dagnostics training train-openai[/cyan]")
+    console.print("   • Remote: [cyan]dagnostics training remote-train[/cyan]")
+    console.print(
+        "3. Evaluate model: [cyan]dagnostics training evaluate <model_path>[/cyan]"
+    )
+
+
+@training_app.command("start-server")
+def start_training_server(
+    host: str = typer.Option("0.0.0.0", help="Host to bind to"),
+    port: int = typer.Option(8001, help="Port to bind to"),
+    workers: int = typer.Option(1, help="Number of workers"),
+    log_level: str = typer.Option("info", help="Log level"),
+):
+    """Start the remote training server"""
+
+    console.print(
+        f"[bold blue]Starting DAGnostics Training Server on {host}:{port}[/bold blue]"
+    )
+
+    try:
+        import sys
+
+        from dagnostics.training.training_server import main as server_main
+
+        # Override sys.argv for the server main function
+        original_argv = sys.argv.copy()
+        sys.argv = [
+            "training_server.py",
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--workers",
+            str(workers),
+            "--log-level",
+            log_level,
+        ]
+
+        try:
+            server_main()
+        finally:
+            sys.argv = original_argv
+
+    except ImportError as e:
+        console.print(f"[red]❌ Training server dependencies missing: {e}[/red]")
+        console.print("Install with: [cyan]pip install 'dagnostics[finetuning]'[/cyan]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]❌ Failed to start training server: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@training_app.command("setup-remote")
+def setup_remote_training(
+    mode: str = typer.Option(None, help="Setup mode: local, docker, or cloud"),
+):
+    """Setup remote training infrastructure"""
+
+    console.print("[bold blue]Setting up remote training infrastructure...[/bold blue]")
+
+    try:
+        import subprocess
+        import sys
+
+        script_path = "scripts/setup_remote_training.py"
+
+        cmd = [sys.executable, script_path]
+        if mode:
+            cmd.extend(["--mode", mode])
+
+        result = subprocess.run(cmd, check=False)
+
+        if result.returncode == 0:
+            console.print("[green]✅ Remote training setup completed![/green]")
+        else:
+            console.print("[red]❌ Remote training setup failed[/red]")
+            raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(f"[red]❌ Setup failed: {e}[/red]")
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     training_app()

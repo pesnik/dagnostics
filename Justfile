@@ -183,3 +183,233 @@ check:
 # Watch files and run tests on change (requires entr)
 watch:
     find . -name "*.py" | entr -c just test
+
+# =====================================
+# Fine-tuning and Training Commands
+# =====================================
+
+# Install fine-tuning dependencies
+setup-training:
+    @echo "Installing fine-tuning dependencies..."
+    uv sync --extra finetuning
+    @echo "Training environment ready!"
+
+# Install all dependencies including training
+setup-full:
+    @echo "Installing all dependencies..."
+    uv sync --extra all
+    @echo "Full environment ready!"
+
+# Check training environment status
+training-status:
+    @echo "Checking training environment..."
+    uv run dagnostics training status
+
+# Prepare fine-tuning datasets from human-reviewed data
+# Usage: just prepare-training-data [dataset_path]
+prepare-training-data dataset_path="data/training_dataset_2025-08-17T11-15-10.json":
+    @echo "Preparing training datasets from {{dataset_path}}..."
+    uv run dagnostics training prepare-data {{dataset_path}}
+    @echo "Training datasets prepared!"
+
+# Alternative: run the Python script directly
+prepare-data-script dataset_path="data/training_dataset_2025-08-17T11-15-10.json":
+    @echo "Running data preparation script..."
+    uv run python scripts/prepare_training_data.py {{dataset_path}}
+    @echo "Data preparation complete!"
+
+# Fine-tune local model with default settings
+train-local-default:
+    @echo "Starting local fine-tuning with default settings..."
+    uv run dagnostics training train-local --epochs 3 --batch-size 2
+    @echo "Local fine-tuning complete!"
+
+# Fine-tune local model with custom settings
+# Usage: just train-local <model_name> <epochs> <batch_size>
+train-local model_name="microsoft/DialoGPT-small" epochs="3" batch_size="2":
+    @echo "Fine-tuning {{model_name}} for {{epochs}} epochs..."
+    uv run dagnostics training train-local \
+        --model-name "{{model_name}}" \
+        --epochs {{epochs}} \
+        --batch-size {{batch_size}} \
+        --use-quantization true \
+        --export-for-ollama true
+    @echo "Local fine-tuning complete!"
+
+# Fine-tune with OpenAI API
+# Usage: just train-openai [model] [suffix]
+train-openai model="gpt-3.5-turbo" suffix="dagnostics-error-extractor":
+    @echo "Starting OpenAI fine-tuning with {{model}}..."
+    uv run dagnostics training train-openai \
+        --model "{{model}}" \
+        --suffix "{{suffix}}" \
+        --wait true
+    @echo "OpenAI fine-tuning complete!"
+
+# Prepare data for Anthropic fine-tuning
+# Usage: just train-anthropic [model]
+train-anthropic model="claude-3-haiku-20240307":
+    @echo "Preparing Anthropic data for {{model}}..."
+    uv run dagnostics training train-anthropic --model "{{model}}"
+    @echo "Anthropic data preparation complete!"
+
+# Submit remote training job
+# Usage: just train-remote [server_url] [model_name] [epochs]
+train-remote server_url="http://localhost:8001" model_name="microsoft/DialoGPT-small" epochs="3":
+    @echo "Submitting remote training job to {{server_url}}..."
+    uv run dagnostics training remote-train \
+        --server-url "{{server_url}}" \
+        --model-name "{{model_name}}" \
+        --epochs {{epochs}} \
+        --wait true
+    @echo "Remote training job submitted!"
+
+# Check remote training job status
+# Usage: just remote-status <job_id> [server_url]
+remote-status job_id server_url="http://localhost:8001":
+    @echo "Checking status of job {{job_id}}..."
+    uv run dagnostics training remote-status {{job_id}} --server-url "{{server_url}}"
+
+# Download remote training result
+# Usage: just remote-download <job_id> [output_dir] [server_url]
+remote-download job_id output_dir="models/fine_tuned" server_url="http://localhost:8001":
+    @echo "Downloading model from job {{job_id}}..."
+    uv run dagnostics training remote-download {{job_id}} \
+        --output-dir "{{output_dir}}" \
+        --server-url "{{server_url}}"
+    @echo "Model downloaded!"
+
+# Evaluate a fine-tuned model
+# Usage: just evaluate-model <model_path> [test_dataset] [model_type]
+evaluate-model model_path test_dataset="data/fine_tuning/validation_dataset.jsonl" model_type="local":
+    @echo "Evaluating model: {{model_path}}..."
+    uv run dagnostics training evaluate "{{model_path}}" \
+        --test-dataset "{{test_dataset}}" \
+        --model-type "{{model_type}}"
+    @echo "Model evaluation complete!"
+
+# Deploy model to Ollama
+# Usage: just deploy-ollama <model_path> [model_name]
+deploy-ollama model_path model_name="dagnostics-error-extractor":
+    @echo "Deploying {{model_path}} to Ollama as {{model_name}}..."
+    uv run dagnostics training deploy-ollama "{{model_path}}" \
+        --model-name "{{model_name}}" \
+        --auto-build true
+    @echo "Model deployed to Ollama!"
+
+# Show feedback statistics
+feedback-stats:
+    @echo "Showing feedback statistics..."
+    uv run dagnostics training feedback-stats
+
+# Export feedback for training
+# Usage: just export-feedback [min_rating]
+export-feedback min_rating="3":
+    @echo "Exporting feedback with minimum rating {{min_rating}}..."
+    uv run dagnostics training export-feedback --min-rating {{min_rating}}
+    @echo "Feedback exported!"
+
+# Complete fine-tuning workflow (prepare → train → evaluate)
+# Usage: just train-workflow [model_name] [epochs]
+train-workflow model_name="microsoft/DialoGPT-small" epochs="3":
+    @echo "Running complete fine-tuning workflow..."
+    @just prepare-training-data
+    @just train-local "{{model_name}}" "{{epochs}}" "2"
+    @echo "Fine-tuning workflow complete!"
+
+# Quick training setup and status check
+train-setup:
+    @echo "Setting up training environment..."
+    @just setup-training
+    @just training-status
+    @echo "Training setup complete!"
+
+# Setup remote training infrastructure
+# Usage: just setup-remote [mode]
+setup-remote mode="":
+    @echo "Setting up remote training infrastructure..."
+    @if [ "{{mode}}" = "" ]; then \
+        uv run dagnostics training setup-remote; \
+    else \
+        uv run dagnostics training setup-remote --mode {{mode}}; \
+    fi
+    @echo "Remote training setup complete!"
+
+# Start training server (for remote training)
+# Usage: just start-training-server [host] [port]
+start-training-server host="0.0.0.0" port="8001":
+    @echo "Starting training server on {{host}}:{{port}}..."
+    uv run dagnostics training start-server --host {{host}} --port {{port}}
+
+# Setup and start local training server
+train-server-local:
+    @echo "Setting up and starting local training server..."
+    @just setup-training
+    @just start-training-server localhost 8001
+
+# =====================================
+# Web Dashboard Commands
+# =====================================
+
+# Start web dashboard with default settings
+web:
+    @echo "Starting web dashboard..."
+    uv run dagnostics web
+    @echo "Web dashboard started!"
+
+# Start web dashboard with custom host and port
+# Usage: just web-custom <host> <port>
+web-custom host="0.0.0.0" port="8000":
+    @echo "Starting web dashboard on {{host}}:{{port}}..."
+    uv run dagnostics web --host {{host}} --port {{port}}
+    @echo "Web dashboard started!"
+
+# Start web dashboard in development mode
+web-dev:
+    @echo "Starting web dashboard in development mode..."
+    uv run dagnostics web --reload --log-level debug
+    @echo "Development web dashboard started!"
+
+# =====================================
+# Daemon and Monitoring Commands
+# =====================================
+
+# Start daemon service
+daemon-start:
+    @echo "Starting daemon service..."
+    uv run dagnostics daemon start
+    @echo "Daemon started!"
+
+# Stop daemon service
+daemon-stop:
+    @echo "Stopping daemon service..."
+    uv run dagnostics daemon stop
+    @echo "Daemon stopped!"
+
+# Check daemon status
+daemon-status:
+    @echo "Checking daemon status..."
+    uv run dagnostics daemon status
+
+# Restart daemon service
+daemon-restart:
+    @echo "Restarting daemon service..."
+    @just daemon-stop
+    @just daemon-start
+    @echo "Daemon restarted!"
+
+# =====================================
+# Development Workflows
+# =====================================
+
+# Complete development setup with training
+dev-full: setup-full format lint test
+    @echo "Full development workflow complete!"
+
+# Training development workflow
+dev-training: setup-training train-setup
+    @echo "Training development workflow complete!"
+
+# Production deployment workflow
+deploy-prod: clean format lint test build
+    @echo "Production deployment workflow complete!"

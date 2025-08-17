@@ -18,12 +18,15 @@ DAGnostics is an intelligent ETL monitoring system that leverages LLMs to analyz
 - **Real-time Statistics**: Live error trends, categories breakdown, and failure timelines
 - **Mobile-Responsive**: Optimized for desktop and mobile monitoring
 
-### 🎯 **Training Dataset Management**
+### 🎯 **Training Dataset Management & Fine-tuning**
 - **Training Interface**: Web-based interface for creating and managing ML training datasets
 - **Human Feedback Loop**: Review and correct LLM predictions to improve model accuracy
 - **Dataset Export**: Export training data in JSON, CSV, and JSONL formats
 - **Live Data Integration**: Pull failed tasks directly from Airflow for dataset creation
-- **Model Fine-tuning**: Built-in support for fine-tuning small language models
+- **Model Fine-tuning**: Built-in support for fine-tuning small language models with LoRA/QLoRA
+- **Multi-Provider Training**: Local models (HuggingFace), OpenAI API, and Anthropic preparation
+- **Model Evaluation**: Comprehensive accuracy metrics and production readiness assessment
+- **Ollama Integration**: Export fine-tuned models for local deployment
 
 ### 🛠 **Integration & Operations**
 - **Airflow Integration**: Direct integration with Airflow API and database for real-time log collection
@@ -135,7 +138,7 @@ pip install dagnostics[all]
 
 - **🚀 Web Dashboard Only:** `pip install dagnostics[web]` - Minimal dependencies, fast installation
 - **🧠 Full Analysis:** `pip install dagnostics[llm]` - Includes LLM providers for error analysis
-- **🔬 Research/Training:** `pip install dagnostics[finetuning]` - Heavy ML libraries for model training
+- **🔬 Model Training:** `pip install dagnostics[finetuning]` - ML libraries for local model fine-tuning
 - **👨‍💻 Development:** `pip install dagnostics[dev]` - Testing and linting tools
 
 ### Setup Steps
@@ -247,6 +250,211 @@ prompts:
   templates:
     error_extraction: |
       You are an expert ETL engineer analyzing Airflow task failure logs...
+```
+
+---
+
+## 🤖 Model Fine-tuning & Training
+
+DAGnostics provides comprehensive fine-tuning capabilities to improve error extraction accuracy using your production data.
+
+### 🎯 Quick Start: Fine-tuning Workflow
+
+```bash
+# 1. Check training environment status
+dagnostics training status
+
+# 2. Prepare datasets from human-reviewed data
+dagnostics training prepare-data data/your_training_dataset.json
+
+# 3. Choose your training method:
+
+# Option A: Local fine-tuning (requires GPU/training deps)
+dagnostics training train-local --epochs 3 --batch-size 2
+
+# Option B: OpenAI API fine-tuning
+export OPENAI_API_KEY="your-key-here"
+dagnostics training train-openai --model gpt-3.5-turbo
+
+# Option C: Remote training server
+dagnostics training remote-train --server-url http://training-server:8001
+
+# 4. Evaluate your model
+dagnostics training evaluate <model_path> --test-dataset data/fine_tuning/validation_dataset.jsonl
+
+# 5. Deploy to Ollama for local inference
+dagnostics training deploy-ollama <model_path> --model-name my-error-extractor
+```
+
+### 📊 Training Data Requirements
+
+DAGnostics fine-tuning works best with:
+
+- **Minimum 50+ examples** (more is better)
+- **Human-reviewed error extractions** for quality
+- **Diverse error patterns** from your production environment
+- **Balanced category distribution** across error types
+
+### 🔧 Training Options
+
+#### Local Model Fine-tuning
+
+**Requirements:**
+- GPU with 8GB+ VRAM (recommended)
+- Training dependencies: `pip install dagnostics[finetuning]`
+
+**Features:**
+- **LoRA/QLoRA**: Memory-efficient fine-tuning
+- **Quantization**: 4-bit training for resource efficiency
+- **Custom Models**: Support for any HuggingFace model
+- **Ollama Export**: Direct deployment to local inference
+
+```bash
+# Install training dependencies
+pip install dagnostics[finetuning]
+
+# Fine-tune with custom settings
+dagnostics training train-local \
+  --model-name "microsoft/DialoGPT-small" \
+  --epochs 5 \
+  --learning-rate 2e-4 \
+  --batch-size 4 \
+  --model-output-name "my-error-extractor" \
+  --use-quantization true
+```
+
+#### OpenAI API Fine-tuning
+
+**Requirements:**
+- OpenAI API key with fine-tuning access
+- Credits for training costs
+
+**Features:**
+- **Cloud Training**: No local GPU required
+- **Production Ready**: High-quality models
+- **Automatic Scaling**: Handles large datasets
+- **API Integration**: Seamless deployment
+
+```bash
+# Set API key
+export OPENAI_API_KEY="your-key-here"
+
+# Start fine-tuning
+dagnostics training train-openai \
+  --model "gpt-3.5-turbo" \
+  --suffix "my-error-extractor" \
+  --wait true
+```
+
+#### Remote Training Server
+
+**Requirements:**
+- Remote training server with GPU
+- Network access to training machine
+
+**Features:**
+- **Distributed Training**: Offload compute to dedicated machines
+- **Job Management**: Monitor training progress remotely
+- **Model Download**: Retrieve trained models automatically
+
+```bash
+# Submit training job
+dagnostics training remote-train \
+  --model-name "microsoft/DialoGPT-small" \
+  --epochs 3 \
+  --server-url "http://gpu-server:8001" \
+  --wait true
+
+# Check job status
+dagnostics training remote-status <job_id>
+
+# Download completed model
+dagnostics training remote-download <job_id>
+```
+
+### 📈 Model Evaluation
+
+Evaluate your fine-tuned models with comprehensive metrics:
+
+```bash
+# Evaluate local model
+dagnostics training evaluate models/my-model \
+  --test-dataset data/fine_tuning/validation_dataset.jsonl \
+  --model-type local
+
+# Evaluate OpenAI fine-tuned model
+dagnostics training evaluate "ft:gpt-3.5-turbo:my-org:model:abc123" \
+  --model-type openai
+
+# View detailed evaluation report
+cat evaluations/evaluation_20250817_143022.md
+```
+
+**Evaluation Metrics:**
+- **Accuracy**: Percentage of correctly extracted errors
+- **Exact Match Rate**: Perfect string matches with human labels
+- **Similarity Score**: Token-based similarity for partial matches
+- **Category Analysis**: Performance breakdown by error type
+
+### 🚀 Deployment Options
+
+#### Deploy to Ollama (Local)
+
+```bash
+# Export and deploy fine-tuned model
+dagnostics training deploy-ollama models/my-model \
+  --model-name "dagnostics-error-extractor" \
+  --auto-build true
+
+# Test deployed model
+ollama run dagnostics-error-extractor "Analyze this error log..."
+
+# Update DAGnostics config to use fine-tuned model
+# config/config.yaml:
+llm:
+  default_provider: "ollama"
+  providers:
+    ollama:
+      base_url: "http://localhost:11434"
+      model: "dagnostics-error-extractor"
+```
+
+#### Use OpenAI Fine-tuned Model
+
+```bash
+# Update config to use fine-tuned OpenAI model
+# config/config.yaml:
+llm:
+  default_provider: "openai"
+  providers:
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "ft:gpt-3.5-turbo:my-org:model:abc123"
+```
+
+### 🔄 Continuous Improvement Workflow
+
+1. **Collect Production Data**: Use web interface to review and correct LLM predictions
+2. **Export Training Data**: `dagnostics training export-feedback --min-rating 3`
+3. **Retrain Models**: Periodically fine-tune with new human feedback
+4. **A/B Testing**: Compare fine-tuned vs base model performance
+5. **Production Deployment**: Replace base models with fine-tuned versions
+
+### 📚 Training Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `training status` | Show training environment and dataset status |
+| `training prepare-data` | Convert human-reviewed data to training format |
+| `training train-local` | Fine-tune local model with LoRA/QLoRA |
+| `training train-openai` | Fine-tune using OpenAI API |
+| `training train-anthropic` | Prepare data for Anthropic (when available) |
+| `training evaluate` | Evaluate model accuracy on test data |
+| `training deploy-ollama` | Export model for Ollama deployment |
+| `training remote-train` | Submit job to remote training server |
+| `training remote-status` | Check remote training job status |
+| `training feedback-stats` | Show human feedback statistics |
+| `training export-feedback` | Export feedback for training |
       {few_shot_examples}
 
       Now analyze this log:
@@ -611,9 +819,10 @@ _Note: The backend API endpoints for the dashboard may be incomplete or stubbed.
 - **Report generation and export:** HTML, JSON, PDF report formats (stub implementation)
 - **Advanced Analytics**: Trend analysis, error correlation, predictive insights
 - **Web Dashboard Backend**: Complete REST API endpoints for dashboard functionality
-- **Fine-tuning Support**: Custom model fine-tuning for domain-specific error patterns
 - **Integration Plugins**: Connectors for popular monitoring tools (Datadog, Grafana, etc.)
 - **Advanced Filtering**: ML-based log filtering and noise reduction
+- **Auto-scaling Training**: Distributed training across multiple GPUs/machines
+- **Model Registry**: Version control and management for fine-tuned models
 
 See [CONTRIBUTING.md](docs/contributing.md) for how to help!
 

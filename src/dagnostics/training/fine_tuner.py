@@ -220,6 +220,7 @@ class SLMFineTuner:
         num_epochs: int = 3,
         learning_rate: float = 2e-4,
         batch_size: int = 4,
+        model_output_name: str = "dagnostics-error-extractor",
     ) -> str:
         """Fine-tune the model"""
 
@@ -310,7 +311,7 @@ class SLMFineTuner:
         # Save the final model
         final_model_path = (
             self.output_dir
-            / f"dagnostics-slm-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            / f"{model_output_name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         )
         trainer.save_model(str(final_model_path))
         if self.tokenizer is not None:
@@ -464,40 +465,88 @@ Analyze logs and extract root cause errors in JSON format.\"\"\"
         return str(export_dir)
 
 
-def main():
-    """Example usage of the fine-tuner"""
+def train_from_prepared_data(
+    model_name: str = "microsoft/DialoGPT-small",
+    train_dataset_path: str = "data/fine_tuning/train_dataset.jsonl",
+    validation_dataset_path: str = "data/fine_tuning/validation_dataset.jsonl",
+    epochs: int = 3,
+    learning_rate: float = 2e-4,
+    batch_size: int = 2,
+    model_output_name: str = "dagnostics-error-extractor",
+    use_quantization: bool = True,
+    export_for_ollama: bool = True,
+) -> str:
+    """Train model from prepared fine-tuning datasets"""
+
+    logger.info(f"Starting fine-tuning with prepared data from {train_dataset_path}")
 
     # Initialize fine-tuner
-    fine_tuner = SLMFineTuner(
-        model_name="microsoft/DialoGPT-small", use_quantization=True
-    )
+    fine_tuner = SLMFineTuner(model_name=model_name, use_quantization=use_quantization)
 
     # Check if training datasets exist
-    train_path = "data/training/train_dataset.jsonl"
-    val_path = "data/training/validation_dataset.jsonl"
+    if not Path(train_dataset_path).exists():
+        raise FileNotFoundError(
+            f"Training dataset not found: {train_dataset_path}\n"
+            "Run 'dagnostics training prepare-data' first to create training datasets"
+        )
 
-    if not Path(train_path).exists():
-        logger.error(f"Training dataset not found: {train_path}")
-        logger.info("Run dataset_generator.py first to create training data")
-        return
+    val_path = (
+        validation_dataset_path if Path(validation_dataset_path).exists() else None
+    )
+    if not val_path:
+        logger.warning(f"Validation dataset not found: {validation_dataset_path}")
 
     # Fine-tune the model
     model_path = fine_tuner.train_model(
-        train_dataset_path=train_path,
-        validation_dataset_path=val_path if Path(val_path).exists() else None,
-        num_epochs=3,
-        learning_rate=2e-4,
-        batch_size=2,  # Small batch size for resource efficiency
+        train_dataset_path=train_dataset_path,
+        validation_dataset_path=val_path,
+        num_epochs=epochs,
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        model_output_name=model_output_name,
     )
 
     # Evaluate the model
-    if Path(val_path).exists():
+    if val_path:
+        logger.info("Evaluating model on validation set...")
         eval_results = fine_tuner.evaluate_model(model_path, val_path)
-        print(f"Model evaluation: Perplexity = {eval_results['perplexity']:.2f}")
+        logger.info(
+            f"Model evaluation completed: Perplexity = {eval_results['perplexity']:.2f}"
+        )
 
-    # Export for Ollama
-    ollama_path = fine_tuner.export_for_ollama(model_path, "dagnostics-slm-v1")
-    print(f"Model ready for Ollama deployment: {ollama_path}")
+    # Export for Ollama if requested
+    if export_for_ollama:
+        logger.info("Exporting model for Ollama deployment...")
+        ollama_path = fine_tuner.export_for_ollama(model_path, model_output_name)
+        logger.info(f"Model ready for Ollama deployment: {ollama_path}")
+
+    logger.info(f"Fine-tuning completed! Model saved to: {model_path}")
+    return model_path
+
+
+def main():
+    """Example usage of the fine-tuner with prepared datasets"""
+    try:
+        model_path = train_from_prepared_data(
+            model_name="microsoft/DialoGPT-small",
+            epochs=3,
+            batch_size=2,
+            use_quantization=True,
+            export_for_ollama=True,
+        )
+        print(f"\n✅ Fine-tuning completed successfully!")
+        print(f"📁 Model saved to: {model_path}")
+        print(f"\n🚀 To use the model:")
+        print(
+            f"   1. For Ollama: Check the deployment instructions in the model directory"
+        )
+        print(
+            f"   2. For local inference: Use the model path directly with transformers"
+        )
+
+    except Exception as e:
+        print(f"❌ Fine-tuning failed: {e}")
+        logger.error(f"Fine-tuning error: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
