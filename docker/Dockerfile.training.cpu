@@ -57,7 +57,7 @@ COPY --chown=trainer:trainer . /app/
 
 # Install the application and CPU-only ML dependencies
 RUN . .venv/bin/activate && \
-    uv add transformers datasets peft accelerate && \
+    uv add transformers datasets peft accelerate python-multipart && \
     uv sync --no-dev && \
     pip install -e .
 
