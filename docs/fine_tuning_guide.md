@@ -29,13 +29,15 @@ pip install rich typer  # For CLI
 
 ### Hardware Requirements
 
-**Minimum:**
-- 8GB RAM
-- 4GB VRAM (GPU recommended but not required)
+**CPU-Only (Fallback):**
+- 8GB+ RAM
+- No GPU required
+- Slower training (10-30 minutes vs 2-5 minutes)
 
-**Recommended:**
+**GPU (Recommended):**
 - 16GB+ RAM
 - 8GB+ VRAM (RTX 3080/4070+ or equivalent)
+- Fast training (2-5 minutes)
 
 **Cloud Options:**
 - Google Colab Pro (T4/A100)
@@ -109,26 +111,59 @@ This creates:
 ### 3.1 Fine-tune Model
 
 ```bash
-# Basic training with defaults
-uv run dagnostics training train-model
+# GPU training (recommended)
+uv run dagnostics training train-local
 
-# Advanced configuration
-uv run dagnostics training train-model \
+# CPU fallback (for testing/no GPU)
+uv run dagnostics training train-local --force-cpu --batch-size 1 --epochs 1
+
+# Advanced GPU configuration
+uv run dagnostics training train-local \
   --model-name "microsoft/DialoGPT-small" \
   --epochs 5 \
   --learning-rate 2e-4 \
   --batch-size 4 \
   --use-quantization true
+
+# CPU configuration with optimal settings
+uv run dagnostics training train-local \
+  --model-name "microsoft/DialoGPT-small" \
+  --epochs 3 \
+  --batch-size 1 \
+  --force-cpu \
+  --use-quantization false
+```
+
+### 3.1.1 Justfile Shortcuts
+
+```bash
+# Quick CPU test (if you have just installed)
+just train-cpu-test
+
+# CPU training with defaults
+just train-cpu
+
+# GPU training with defaults
+just train-local
+
+# Complete CPU workflow
+just train-workflow-cpu
 ```
 
 ### 3.2 Model Selection Guide
 
-| Model | Size | Best For | Memory |
-|-------|------|----------|---------|
-| `microsoft/DialoGPT-small` | 117M | General chat/analysis | 2GB |
-| `distilbert-base-uncased` | 66M | Classification tasks | 1GB |
-| `google/flan-t5-small` | 80M | Instruction following | 1.5GB |
-| `microsoft/codebert-base` | 125M | Code understanding | 2GB |
+| Model | Size | Best For | GPU Memory | CPU Memory |
+|-------|------|----------|------------|------------|
+| `microsoft/DialoGPT-small` | 117M | General chat/analysis | 2GB | 4GB |
+| `distilbert-base-uncased` | 66M | Classification tasks | 1GB | 2GB |
+| `google/flan-t5-small` | 80M | Instruction following | 1.5GB | 3GB |
+| `microsoft/codebert-base` | 125M | Code understanding | 2GB | 4GB |
+
+**CPU Training Notes:**
+- CPU training uses `float32` (not `float16`) for better compatibility
+- Quantization is automatically disabled on CPU
+- LoRA is skipped for basic models to reduce complexity
+- Batch size should be 1 for CPU training
 
 ### 3.3 Training Configuration
 
@@ -246,10 +281,24 @@ uv run dagnostics training feedback-stats
 
 ### Common Issues
 
-**Out of Memory:**
+**Out of Memory (GPU):**
 ```bash
 # Reduce batch size and enable quantization
 --batch-size 1 --use-quantization true
+```
+
+**Out of Memory (CPU):**
+```bash
+# Use CPU fallback with minimal batch size
+--force-cpu --batch-size 1 --epochs 1
+```
+
+**No GPU Available:**
+```bash
+# Use CPU training mode
+just train-cpu
+# Or manually:
+uv run dagnostics training train-local --force-cpu
 ```
 
 **No feedback data:**

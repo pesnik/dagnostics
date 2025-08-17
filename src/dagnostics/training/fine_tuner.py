@@ -60,6 +60,7 @@ class SLMFineTuner:
         model_name: str = "microsoft/DialoGPT-small",
         output_dir: str = "models/fine_tuned",
         use_quantization: bool = True,
+        force_cpu: bool = False,
     ):
 
         if not HAS_ML_DEPS:
@@ -73,6 +74,7 @@ class SLMFineTuner:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.use_quantization = use_quantization
+        self.force_cpu = force_cpu
 
         # Model will be loaded during training
         self.model: Optional["AutoModelForCausalLM"] = None
@@ -97,8 +99,19 @@ class SLMFineTuner:
         if self.tokenizer and self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Quantization config for memory efficiency
-        if self.use_quantization:
+        # Configure device and data type based on CPU/GPU mode
+        if self.force_cpu:
+            device_map = None
+            torch_dtype = torch.float32  # CPU works better with float32
+            use_quantization = False  # Disable quantization for CPU
+            logger.info("Using CPU mode - disabling quantization and GPU optimizations")
+        else:
+            device_map = "auto"
+            torch_dtype = torch.float16
+            use_quantization = self.use_quantization
+
+        # Quantization config for memory efficiency (GPU only)
+        if use_quantization and not self.force_cpu:
             bnb_config = transformers.BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
@@ -109,7 +122,7 @@ class SLMFineTuner:
             self.model = transformers.AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 quantization_config=bnb_config,
-                device_map="auto",
+                device_map=device_map,
                 trust_remote_code=True,
             )
 
@@ -118,10 +131,14 @@ class SLMFineTuner:
         else:
             self.model = transformers.AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                torch_dtype=torch.float16,
-                device_map="auto",
+                torch_dtype=torch_dtype,
+                device_map=device_map,
                 trust_remote_code=True,
             )
+
+            # Move to CPU if forced
+            if self.force_cpu and device_map is None:
+                self.model = self.model.to("cpu")
 
         logger.info("Model and tokenizer loaded successfully")
 
@@ -234,9 +251,14 @@ class SLMFineTuner:
         if self.model is None:
             self.setup_model_and_tokenizer()
 
-        # Setup LoRA
-        lora_config = self.setup_lora_config()
-        self.model = peft.get_peft_model(self.model, lora_config)
+        # Setup LoRA (skip for CPU-only mode with basic models)
+        if not self.force_cpu or "DialoGPT" not in self.model_name:
+            lora_config = self.setup_lora_config()
+            self.model = peft.get_peft_model(self.model, lora_config)
+        else:
+            logger.info(
+                "Skipping LoRA for CPU mode with basic model - using full fine-tuning"
+            )
 
         # Print trainable parameters
         trainable_params = 0
@@ -273,7 +295,7 @@ class SLMFineTuner:
             save_steps=100,
             learning_rate=learning_rate,
             weight_decay=0.01,
-            fp16=True,
+            fp16=not self.force_cpu,  # Disable fp16 for CPU
             bf16=False,
             max_grad_norm=1.0,
             warmup_ratio=0.1,
@@ -475,13 +497,16 @@ def train_from_prepared_data(
     model_output_name: str = "dagnostics-error-extractor",
     use_quantization: bool = True,
     export_for_ollama: bool = True,
+    force_cpu: bool = False,
 ) -> str:
     """Train model from prepared fine-tuning datasets"""
 
     logger.info(f"Starting fine-tuning with prepared data from {train_dataset_path}")
 
     # Initialize fine-tuner
-    fine_tuner = SLMFineTuner(model_name=model_name, use_quantization=use_quantization)
+    fine_tuner = SLMFineTuner(
+        model_name=model_name, use_quantization=use_quantization, force_cpu=force_cpu
+    )
 
     # Check if training datasets exist
     if not Path(train_dataset_path).exists():
@@ -533,15 +558,16 @@ def main():
             batch_size=2,
             use_quantization=True,
             export_for_ollama=True,
+            force_cpu=False,  # Set to True for CPU-only training
         )
-        print(f"\n✅ Fine-tuning completed successfully!")
+        print("\n✅ Fine-tuning completed successfully!")
         print(f"📁 Model saved to: {model_path}")
-        print(f"\n🚀 To use the model:")
+        print("\n🚀 To use the model:")
         print(
-            f"   1. For Ollama: Check the deployment instructions in the model directory"
+            "   1. For Ollama: Check the deployment instructions in the model directory"
         )
         print(
-            f"   2. For local inference: Use the model path directly with transformers"
+            "   2. For local inference: Use the model path directly with transformers"
         )
 
     except Exception as e:

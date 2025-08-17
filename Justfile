@@ -236,6 +236,25 @@ train-local model_name="microsoft/DialoGPT-small" epochs="3" batch_size="2":
         --export-for-ollama true
     @echo "Local fine-tuning complete!"
 
+# Fine-tune with CPU fallback (for testing/no GPU)
+# Usage: just train-cpu [model_name] [epochs] [batch_size]
+train-cpu model_name="microsoft/DialoGPT-small" epochs="1" batch_size="1":
+    @echo "Fine-tuning {{model_name}} on CPU ({{epochs}} epochs, batch size {{batch_size}})..."
+    uv run dagnostics training train-local \
+        --model-name "{{model_name}}" \
+        --epochs {{epochs}} \
+        --batch-size {{batch_size}} \
+        --force-cpu \
+        --use-quantization false \
+        --export-for-ollama false
+    @echo "CPU fine-tuning complete!"
+
+# Quick CPU training test
+train-cpu-test:
+    @echo "Running quick CPU training test..."
+    uv run python test_cpu_training.py
+    @echo "CPU training test complete!"
+
 # Fine-tune with OpenAI API
 # Usage: just train-openai [model] [suffix]
 train-openai model="gpt-3.5-turbo" suffix="dagnostics-error-extractor":
@@ -317,6 +336,14 @@ train-workflow model_name="microsoft/DialoGPT-small" epochs="3":
     @just train-local "{{model_name}}" "{{epochs}}" "2"
     @echo "Fine-tuning workflow complete!"
 
+# CPU-only training workflow (for testing/no GPU)
+# Usage: just train-workflow-cpu [model_name] [epochs]
+train-workflow-cpu model_name="microsoft/DialoGPT-small" epochs="1":
+    @echo "Running CPU-only fine-tuning workflow..."
+    @just prepare-training-data
+    @just train-cpu "{{model_name}}" "{{epochs}}" "1"
+    @echo "CPU fine-tuning workflow complete!"
+
 # Quick training setup and status check
 train-setup:
     @echo "Setting up training environment..."
@@ -346,6 +373,17 @@ train-server-local:
     @echo "Setting up and starting local training server..."
     @just setup-training
     @just start-training-server localhost 8001
+
+# Start CPU-only training server
+start-training-server-cpu host="0.0.0.0" port="8001":
+    @echo "Starting CPU-only training server on {{host}}:{{port}}..."
+    DAGNOSTICS_FORCE_CPU=true uv run dagnostics training start-server --host {{host}} --port {{port}}
+
+# Setup and start CPU training server
+train-server-cpu:
+    @echo "Setting up and starting CPU training server..."
+    @just setup-training
+    @just start-training-server-cpu localhost 8001
 
 # =====================================
 # Web Dashboard Commands

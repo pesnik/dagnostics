@@ -1,0 +1,73 @@
+# CPU-only Docker container for DAGnostics fine-tuning
+# Fallback option when GPU is not available
+
+FROM python:3.10-slim
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/huggingface_cache
+ENV TRANSFORMERS_CACHE=/app/huggingface_cache
+ENV TORCH_HOME=/app/torch_cache
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    git \
+    curl \
+    wget \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -s /bin/bash trainer && \
+    mkdir -p /app && \
+    chown -R trainer:trainer /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY pyproject.toml uv.lock ./
+
+# Install Python dependencies (CPU-only PyTorch)
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir uv && \
+    uv venv && \
+    . .venv/bin/activate && \
+    # Install CPU-only PyTorch first
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    uv sync --extra finetuning --no-dev
+
+# Create necessary directories with proper permissions
+RUN mkdir -p \
+    /app/server_data/uploads \
+    /app/server_data/models \
+    /app/server_data/datasets \
+    /app/huggingface_cache \
+    /app/torch_cache \
+    /app/data/fine_tuning \
+    /app/evaluations \
+    /app/models/fine_tuned && \
+    chown -R trainer:trainer /app
+
+# Copy application code
+COPY --chown=trainer:trainer . /app/
+
+# Install the application
+RUN . .venv/bin/activate && pip install -e .
+
+# Switch to non-root user
+USER trainer
+
+# Expose ports
+EXPOSE 8001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+# Default command - CPU training server
+CMD ["/app/.venv/bin/python", "-m", "dagnostics.training.training_server", "--host", "0.0.0.0", "--port", "8001"]

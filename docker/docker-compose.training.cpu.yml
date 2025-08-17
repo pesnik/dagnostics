@@ -1,0 +1,100 @@
+# Docker Compose for CPU-only DAGnostics Training
+# Fallback configuration when GPU is not available
+
+version: '3.8'
+
+services:
+  dagnostics-trainer-cpu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.training.cpu
+    container_name: dagnostics-training-server-cpu
+    restart: unless-stopped
+
+    # Environment variables for CPU training
+    environment:
+      # HuggingFace configuration
+      - HF_HOME=/app/huggingface_cache
+      - TRANSFORMERS_CACHE=/app/huggingface_cache
+      - HF_TOKEN=${HF_TOKEN:-}  # Optional: for private models
+
+      # CPU optimization
+      - OMP_NUM_THREADS=4  # Limit CPU threads
+      - MKL_NUM_THREADS=4
+      - OPENBLAS_NUM_THREADS=4
+      - VECLIB_MAXIMUM_THREADS=4
+      - NUMEXPR_NUM_THREADS=4
+
+      # Force CPU mode
+      - CUDA_VISIBLE_DEVICES=""  # Hide any GPU devices
+      - DAGNOSTICS_FORCE_CPU=true
+
+      # Logging
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=info
+
+    # Port mapping
+    ports:
+      - "8001:8001"
+
+    # Volume mounts for persistence
+    volumes:
+      # Model storage (persistent)
+      - ./server_data/models:/app/server_data/models
+
+      # Dataset storage (persistent)
+      - ./server_data/datasets:/app/server_data/datasets
+
+      # HuggingFace cache (persistent)
+      - ./cache/huggingface:/app/huggingface_cache
+
+      # PyTorch cache (persistent)
+      - ./cache/torch:/app/torch_cache
+
+      # Training data (bind mount)
+      - ./data:/app/data
+
+      # Evaluation results (persistent)
+      - ./evaluations:/app/evaluations
+
+      # Configuration files
+      - ./config:/app/config:ro
+
+    # Resource limits for CPU
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'     # Limit to 4 CPU cores
+          memory: 8G      # Limit memory usage
+        reservations:
+          cpus: '2.0'     # Reserve 2 CPU cores
+          memory: 4G      # Reserve 4GB memory
+
+    # Shared memory for PyTorch DataLoader (smaller for CPU)
+    shm_size: '1gb'
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  # Named volumes for better management
+  huggingface_cache:
+  torch_cache:
+  model_storage:
+  evaluation_results:
+
+networks:
+  default:
+    name: dagnostics-training-cpu

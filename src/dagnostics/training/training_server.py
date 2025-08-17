@@ -5,17 +5,13 @@ FastAPI server for handling remote fine-tuning jobs.
 Runs on GPU machines to offload training computation.
 """
 
-import asyncio
-import json
 import logging
 import shutil
 import tarfile
 import threading
-import time
-import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -114,6 +110,11 @@ def run_training_job(job_request: TrainingJobRequest):
         # Update progress
         update_job_status(job_id, progress=0.1)
 
+        # Check for CPU mode environment variable
+        import os
+
+        force_cpu = os.getenv("DAGNOSTICS_FORCE_CPU", "false").lower() == "true"
+
         # Start training
         model_path = train_from_prepared_data(
             model_name=job_request.model_name,
@@ -123,8 +124,9 @@ def run_training_job(job_request: TrainingJobRequest):
             learning_rate=job_request.learning_rate,
             batch_size=job_request.batch_size,
             model_output_name=f"remote-{job_id}",
-            use_quantization=job_request.use_quantization,
+            use_quantization=job_request.use_quantization and not force_cpu,
             export_for_ollama=False,  # Skip Ollama export on server
+            force_cpu=force_cpu,
         )
 
         # Move model to server models directory
@@ -321,7 +323,7 @@ def main():
         print("Install with: pip install 'dagnostics[finetuning]'")
         exit(1)
 
-    print(f"🚀 Starting DAGnostics Training Server")
+    print("🚀 Starting DAGnostics Training Server")
     print(f"📍 Server: http://{args.host}:{args.port}")
     print(f"📚 API Docs: http://{args.host}:{args.port}/docs")
     print(f"🏃 Workers: {args.workers}")

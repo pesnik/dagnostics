@@ -588,6 +588,9 @@ def train_local_model(
     export_for_ollama: bool = typer.Option(
         True, help="Export model for Ollama after training"
     ),
+    force_cpu: bool = typer.Option(
+        False, help="Force CPU-only training (fallback for testing)"
+    ),
 ):
     """Fine-tune a local model using prepared datasets"""
 
@@ -614,6 +617,7 @@ def train_local_model(
             model_output_name=model_output_name,
             use_quantization=use_quantization,
             export_for_ollama=export_for_ollama,
+            force_cpu=force_cpu,
         )
 
         console.print("[green]✅ Local fine-tuning completed successfully![/green]")
