@@ -33,6 +33,18 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to determine docker compose command
+get_compose_cmd() {
+    if command -v docker-compose &> /dev/null; then
+        echo "docker-compose"
+    elif docker compose version &> /dev/null 2>&1; then
+        echo "docker compose"
+    else
+        print_error "Neither 'docker-compose' nor 'docker compose' is available"
+        exit 1
+    fi
+}
+
 # Function to check prerequisites (CPU version)
 check_prerequisites() {
     print_status "Checking prerequisites for CPU training..."
@@ -44,10 +56,8 @@ check_prerequisites() {
     fi
 
     # Check Docker Compose
-    if ! command -v docker-compose &> /dev/null; then
-        print_error "Docker Compose is not installed"
-        exit 1
-    fi
+    COMPOSE_CMD=$(get_compose_cmd)
+    print_success "Using compose command: $COMPOSE_CMD"
 
     # Check available memory (CPU training needs more RAM)
     TOTAL_MEM=$(free -g | awk '/^Mem:/{print $2}')
@@ -107,15 +117,17 @@ check_training_data() {
 start_server() {
     print_status "Starting DAGnostics CPU training server..."
 
+    COMPOSE_CMD=$(get_compose_cmd)
+
     # Stop existing container if running
     if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
         print_warning "Stopping existing container..."
-        docker-compose -f "$COMPOSE_FILE" down
+        $COMPOSE_CMD -f "$COMPOSE_FILE" down
     fi
 
     # Build and start CPU version
     print_status "Building CPU training container..."
-    docker-compose -f "$COMPOSE_FILE" up --build -d
+    $COMPOSE_CMD -f "$COMPOSE_FILE" up --build -d
 
     # Wait for server to be ready
     print_status "Waiting for server to be ready..."
@@ -127,7 +139,7 @@ start_server() {
 
         if [[ $i -eq 60 ]]; then
             print_error "Server failed to start within 60 seconds"
-            docker-compose -f "$COMPOSE_FILE" logs
+            $COMPOSE_CMD -f "$COMPOSE_FILE" logs
             exit 1
         fi
 
@@ -137,6 +149,8 @@ start_server() {
 
 # Function to show server info
 show_server_info() {
+    COMPOSE_CMD=$(get_compose_cmd)
+
     print_success "🚀 DAGnostics CPU Training Server Started!"
     echo
     echo "📍 Server URL: http://localhost:8001"
@@ -150,12 +164,12 @@ show_server_info() {
     echo "  - Quantization is automatically disabled"
     echo
     echo "📊 Container Status:"
-    docker-compose -f "$COMPOSE_FILE" ps
+    $COMPOSE_CMD -f "$COMPOSE_FILE" ps
     echo
     echo "🔧 Useful Commands:"
-    echo "  View logs:     docker-compose -f $COMPOSE_FILE logs -f"
-    echo "  Stop server:   docker-compose -f $COMPOSE_FILE down"
-    echo "  Restart:       docker-compose -f $COMPOSE_FILE restart"
+    echo "  View logs:     $COMPOSE_CMD -f $COMPOSE_FILE logs -f"
+    echo "  Stop server:   $COMPOSE_CMD -f $COMPOSE_FILE down"
+    echo "  Restart:       $COMPOSE_CMD -f $COMPOSE_FILE restart"
     echo "  Shell access:  docker exec -it $CONTAINER_NAME bash"
     echo
     echo "🎯 Start CPU Training:"
@@ -224,22 +238,25 @@ case "${1:-start}" in
         ;;
 
     stop)
+        COMPOSE_CMD=$(get_compose_cmd)
         print_status "Stopping CPU training server..."
-        docker-compose -f "$COMPOSE_FILE" down
+        $COMPOSE_CMD -f "$COMPOSE_FILE" down
         print_success "Server stopped"
         ;;
 
     restart)
+        COMPOSE_CMD=$(get_compose_cmd)
         print_status "Restarting CPU training server..."
-        docker-compose -f "$COMPOSE_FILE" restart
+        $COMPOSE_CMD -f "$COMPOSE_FILE" restart
         sleep 5
         test_server
         print_success "Server restarted"
         ;;
 
     status)
+        COMPOSE_CMD=$(get_compose_cmd)
         echo "📊 Container Status:"
-        docker-compose -f "$COMPOSE_FILE" ps
+        $COMPOSE_CMD -f "$COMPOSE_FILE" ps
         echo
         if curl -s -f http://localhost:8001/health > /dev/null 2>&1; then
             print_success "CPU server is running and healthy"
@@ -250,7 +267,8 @@ case "${1:-start}" in
         ;;
 
     logs)
-        docker-compose -f "$COMPOSE_FILE" logs -f
+        COMPOSE_CMD=$(get_compose_cmd)
+        $COMPOSE_CMD -f "$COMPOSE_FILE" logs -f
         ;;
 
     test)
@@ -262,10 +280,11 @@ case "${1:-start}" in
         ;;
 
     clean)
+        COMPOSE_CMD=$(get_compose_cmd)
         print_warning "This will remove all containers and images. Continue? (y/N)"
         read -r CONFIRM
         if [[ $CONFIRM =~ ^[Yy]$ ]]; then
-            docker-compose -f "$COMPOSE_FILE" down --rmi all --volumes
+            $COMPOSE_CMD -f "$COMPOSE_FILE" down --rmi all --volumes
             docker system prune -f
             print_success "Cleanup complete"
         fi

@@ -29,8 +29,8 @@ RUN useradd -m -s /bin/bash trainer && \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY pyproject.toml uv.lock ./
+# Copy requirements and README first for better caching
+COPY pyproject.toml uv.lock README.md ./
 
 # Install Python dependencies (CPU-only PyTorch)
 RUN pip3 install --no-cache-dir --upgrade pip && \
@@ -38,8 +38,7 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
     uv venv && \
     . .venv/bin/activate && \
     # Install CPU-only PyTorch first
-    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
-    uv sync --extra finetuning --no-dev
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Create necessary directories with proper permissions
 RUN mkdir -p \
@@ -56,8 +55,10 @@ RUN mkdir -p \
 # Copy application code
 COPY --chown=trainer:trainer . /app/
 
-# Install the application
-RUN . .venv/bin/activate && pip install -e .
+# Install the application and CPU-only ML dependencies
+RUN . .venv/bin/activate && \
+    uv add transformers datasets peft accelerate --no-sync && \
+    pip install -e .
 
 # Switch to non-root user
 USER trainer
