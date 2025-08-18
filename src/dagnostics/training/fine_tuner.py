@@ -215,11 +215,16 @@ class SLMFineTuner:
                 truncation=True,
                 padding=True,
                 max_length=1024,  # Adjust based on your needs
-                return_tensors="pt",
+                # Don't return tensors here - let the trainer handle tensor conversion
             )
 
             # For causal LM, labels are the same as input_ids
-            tokenized["labels"] = tokenized["input_ids"].clone()
+            # Use list comprehension for reliable copying of nested structures
+            tokenized["labels"] = (
+                [ids[:] for ids in tokenized["input_ids"]]
+                if isinstance(tokenized["input_ids"][0], list)
+                else tokenized["input_ids"][:]
+            )
 
             return tokenized
 
