@@ -96,8 +96,8 @@ class SLMFineTuner:
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(self.model_name)
 
         # Add pad token if it doesn't exist
-        if self.tokenizer and self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        if self.tokenizer and getattr(self.tokenizer, "pad_token", None) is None:
+            self.tokenizer.pad_token = getattr(self.tokenizer, "eos_token", "[PAD]")  # type: ignore[attr-defined]
 
         # Configure device and data type based on CPU/GPU mode
         if self.force_cpu:
@@ -137,8 +137,8 @@ class SLMFineTuner:
             )
 
             # Move to CPU if forced
-            if self.force_cpu and device_map is None:
-                self.model = self.model.to("cpu")
+            if self.force_cpu and device_map is None and hasattr(self.model, "to"):
+                self.model = self.model.to("cpu")  # type: ignore[attr-defined]
 
         logger.info("Model and tokenizer loaded successfully")
 
@@ -209,7 +209,8 @@ class SLMFineTuner:
             # Tokenize with truncation and padding
             if self.tokenizer is None:
                 raise RuntimeError("Tokenizer must be initialized")
-            tokenized = self.tokenizer(
+            # Tokenizer is callable - use type ignore for Pylance
+            tokenized = self.tokenizer(  # type: ignore[misc]
                 examples["text"],
                 truncation=True,
                 padding=True,
@@ -241,6 +242,11 @@ class SLMFineTuner:
     ) -> str:
         """Fine-tune the model"""
 
+        # Initialize variables that will be used throughout the method
+        lora_config = None
+        trainable_params = 0
+        total_params = 0
+
         # Import training dependencies at runtime
         peft = _import_optional_dependency("peft", "Install with: pip install peft")
         transformers = _import_optional_dependency(
@@ -253,21 +259,27 @@ class SLMFineTuner:
 
         # Setup LoRA (skip for CPU-only mode with basic models)
         if not self.force_cpu or "DialoGPT" not in self.model_name:
-            lora_config = self.setup_lora_config()
-            self.model = peft.get_peft_model(self.model, lora_config)
+            try:
+                lora_config = self.setup_lora_config()
+                self.model = peft.get_peft_model(self.model, lora_config)
+                logger.info("LoRA configuration applied successfully")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to setup LoRA, proceeding with full fine-tuning: {e}"
+                )
+                lora_config = None
         else:
             logger.info(
                 "Skipping LoRA for CPU mode with basic model - using full fine-tuning"
             )
 
         # Print trainable parameters
-        trainable_params = 0
-        total_params = 0
         if self.model is not None:
-            trainable_params = sum(
-                p.numel() for p in self.model.parameters() if p.requires_grad
-            )
-            total_params = sum(p.numel() for p in self.model.parameters())
+            if hasattr(self.model, "parameters"):
+                trainable_params = sum(
+                    p.numel() for p in self.model.parameters() if p.requires_grad  # type: ignore[attr-defined]
+                )
+                total_params = sum(p.numel() for p in self.model.parameters())  # type: ignore[attr-defined]
             logger.info(
                 f"Trainable parameters: {trainable_params:,} ({trainable_params/total_params*100:.2f}%)"
             )
@@ -336,15 +348,15 @@ class SLMFineTuner:
             / f"{model_output_name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         )
         trainer.save_model(str(final_model_path))
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(str(final_model_path))
+        if self.tokenizer is not None and hasattr(self.tokenizer, "save_pretrained"):
+            self.tokenizer.save_pretrained(str(final_model_path))  # type: ignore[attr-defined]
 
         # Save training info
         training_info = {
             "model_name": self.model_name,
             "final_model_path": str(final_model_path),
             "training_args": training_args.to_dict(),
-            "lora_config": lora_config.to_dict(),
+            "lora_config": lora_config.to_dict() if lora_config else None,
             "train_dataset_path": train_dataset_path,
             "validation_dataset_path": validation_dataset_path,
             "trainable_parameters": trainable_params,
