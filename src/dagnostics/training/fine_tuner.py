@@ -233,6 +233,11 @@ class SLMFineTuner:
             tokenize_function, batched=True, remove_columns=dataset.column_names
         )
 
+        # Set format to PyTorch tensors for trainer compatibility
+        tokenized_dataset.set_format(
+            type="torch", columns=["input_ids", "attention_mask", "labels"]
+        )
+
         logger.info(f"Dataset prepared: {len(tokenized_dataset)} examples")
         return tokenized_dataset
 
@@ -401,10 +406,20 @@ class SLMFineTuner:
 
         with torch.no_grad():
             for example in test_dataset:
-                inputs = {
-                    k: v.unsqueeze(0) for k, v in example.items() if k != "labels"
-                }
-                labels = example["labels"].unsqueeze(0)
+                # Convert lists to tensors if needed
+                inputs = {}
+                for k, v in example.items():
+                    if k != "labels":
+                        if isinstance(v, list):
+                            inputs[k] = torch.tensor(v).unsqueeze(0)
+                        else:
+                            inputs[k] = v.unsqueeze(0)
+
+                # Handle labels conversion
+                if isinstance(example["labels"], list):
+                    labels = torch.tensor(example["labels"]).unsqueeze(0)
+                else:
+                    labels = example["labels"].unsqueeze(0)
 
                 outputs = model(**inputs, labels=labels)
                 total_loss += outputs.loss.item()
