@@ -114,6 +114,39 @@ curl http://localhost:8001/training/status/test-cpu-job
 curl -O http://localhost:8001/training/download/test-cpu-job
 ```
 
+## Permission Issues
+
+### Quick Fix for Permission Errors
+If you encounter permission denied errors like `chown trainer:trainer /app/huggingface_cache/`, run the setup script:
+
+```bash
+# Run the permission setup script
+cd docker
+./setup-permissions.sh
+
+# Then start the container
+docker-compose -f docker-compose.training.cpu.yml up
+```
+
+### Manual Permission Fix
+```bash
+# Set environment variables for user mapping
+export USER_ID=$(id -u)
+export GROUP_ID=$(id -g)
+
+# Create and set ownership of directories
+mkdir -p server_data cache data evaluations config
+sudo chown -R $USER_ID:$GROUP_ID server_data cache data evaluations config
+
+# Start with user mapping
+docker-compose -f docker-compose.training.cpu.yml up
+```
+
+### Why This Happens
+- Docker containers run with a specific user ID (usually 1000)
+- Host mounted volumes need matching ownership
+- The setup script ensures host directories match container user
+
 ## Troubleshooting
 
 ### Container Won't Start

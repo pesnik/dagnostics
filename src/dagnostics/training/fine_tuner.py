@@ -287,7 +287,7 @@ class SLMFineTuner:
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             gradient_accumulation_steps=2,
-            optim="adamw_hf",
+            optim="adamw_torch",
             num_train_epochs=num_epochs,
             eval_strategy="steps" if eval_dataset else "no",
             eval_steps=100 if eval_dataset else None,

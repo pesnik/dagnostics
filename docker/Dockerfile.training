@@ -21,8 +21,11 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN useradd -m -s /bin/bash trainer && \
+# Create non-root user for security (use UID 1000 to match common host user)
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g $GROUP_ID trainer && \
+    useradd -m -s /bin/bash -u $USER_ID -g $GROUP_ID trainer && \
     mkdir -p /app && \
     chown -R trainer:trainer /app
 
