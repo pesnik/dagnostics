@@ -123,6 +123,7 @@ def initialize_llm_provider(config: AppConfig, llm_provider: str) -> LLMProvider
         llm_provider_instance = OllamaProvider(
             base_url=ollama_config.base_url or "http://localhost:11434",
             model=ollama_config.model,
+            timeout=ollama_config.timeout,
         )
 
     elif llm_provider == "openai":

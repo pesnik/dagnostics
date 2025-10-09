@@ -141,6 +141,7 @@ class OllamaLLMConfig(BaseModel):
     base_url: HttpUrl
     model: str
     temperature: float = Field(..., ge=0.0, le=1.0)
+    timeout: int = Field(default=120, ge=10, le=600)  # seconds, default 2min
 
 
 class OpenAILLMConfig(BaseModel):

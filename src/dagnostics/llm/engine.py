@@ -39,15 +39,17 @@ class OllamaProvider(LLMProvider):
         self,
         base_url: Union[str, HttpUrl] = "http://localhost:11434",
         model: str = "mistral",
+        timeout: int = 120,
     ):
         self.base_url = str(base_url).rstrip("/")
         self.model = model
+        self.timeout = timeout
 
     def generate_response(self, prompt: str, **kwargs) -> str:
         payload = {"model": self.model, "prompt": prompt, "stream": False, **kwargs}
         try:
             response = requests.post(
-                f"{self.base_url}/api/generate", json=payload, timeout=60
+                f"{self.base_url}/api/generate", json=payload, timeout=self.timeout
             )
             response.raise_for_status()
             return response.json()["response"]
