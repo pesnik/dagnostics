@@ -1,10 +1,14 @@
+import logging
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
 from dagnostics.core.models import AppConfig
+
+logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: Optional[str] = None) -> AppConfig:
@@ -55,10 +59,10 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
                 with open(path, "r") as f:
                     raw_config_dict = yaml.safe_load(f)
                 config = AppConfig(**raw_config_dict)
-                print(f"Loaded configuration from: {path}")
+                logger.info(f"Loaded configuration from: {path}")
                 return config
             except Exception as e:
-                print(f"Warning: Failed to load config from {path}: {e}")
+                logger.warning(f"Failed to load config from {path}: {e}")
                 continue
 
     # If no config found, provide helpful error message
