@@ -74,9 +74,11 @@ def analyze(
 
         # Output results
         if output_format == OutputFormat.json:
-            typer.echo(json.dumps(result.__dict__, default=str, indent=2))
+            # Use Pydantic's model_dump with mode='json' to properly serialize Enums
+            typer.echo(json.dumps(result.model_dump(mode='json'), indent=2))
         elif output_format == OutputFormat.yaml:
-            typer.echo(yaml.dump(result.__dict__, default_flow_style=False))
+            # Use model_dump for YAML as well for consistency
+            typer.echo(yaml.dump(result.model_dump(mode='json'), default_flow_style=False))
         else:  # text format
             _print_text_analysis(result, verbose)
 
