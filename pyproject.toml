@@ -1,6 +1,6 @@
 [project]
 name = "dagnostics"
-version = "0.6.4"
+version = "0.6.5"
 description = ""
 authors = [{ name = "pesnik", email = "hasanrakibul.masum@gmail.com" }]
 readme = "README.md"
