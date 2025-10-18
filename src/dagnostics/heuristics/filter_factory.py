@@ -56,6 +56,7 @@ class FilterFactory:
         def standard_error_log_except_start_with_caused_by(log_entry: LogEntry) -> bool:
             return (
                 not log_entry.message.startswith("[")
+                and not log_entry.message.startswith("$")
                 and "Caused by" not in log_entry.message
             )
 
@@ -71,7 +72,7 @@ class FilterFactory:
         filter_instance.add_custom_function(
             "standard_error_log",
             standard_error_log_except_start_with_caused_by,
-            "Configuration-related noise",
+            "Standard Error Log",
         )
 
         # Add runtime filters for notification context
