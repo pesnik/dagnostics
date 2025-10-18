@@ -24,17 +24,29 @@ Instructions:
 2. Ignore informational, debug, or warning messages unless they're the root cause
 3. Focus on the MOST RELEVANT error line(s)
 4. Provide confidence score (0.0-1.0)
-5. Suggest error category and severity
+5. Categorize into exactly ONE category from the list below
+6. Assign severity level
 
-Respond in JSON format:
+Available Categories (choose exactly ONE):
+- resource_error: Memory, CPU, disk space, connection pool exhaustion
+- data_quality: Bad data format, schema mismatches, validation failures
+- dependency_failure: Upstream task failures, external service unavailable, network issues
+- configuration_error: Wrong settings, missing parameters, misconfigured services
+- permission_error: Access denied, authentication failures, authorization issues
+- timeout_error: Operations taking too long, deadlocks, connection timeouts
+- unknown: Cannot determine category with confidence
+
+Respond in STRICT JSON format (no additional text or markdown):
 {{
     "error_message": "Exact error message that caused the failure",
     "confidence": 0.85,
-    "category": "resource_error|data_quality|dependency_failure|configuration_error|permission_error|timeout_error|unknown",
-    "severity": "low|medium|high|critical",
+    "category": "dependency_failure",
+    "severity": "high",
     "reasoning": "Brief explanation of why this is the root cause",
     "error_lines": ["specific log lines that contain the error"]
 }}
+
+CRITICAL: The "category" field must contain EXACTLY ONE category name from the list above. Do not use pipe symbols or combine multiple categories.
 """
 
 # Provider-specific additions for error extraction
@@ -44,21 +56,27 @@ IMPORTANT: Respond with valid JSON only. Do not include any markdown formatting 
 
 # Error categorization prompt
 ERROR_CATEGORIZATION_PROMPT = """
-Categorize this error into one of the following categories:
+Categorize this error into EXACTLY ONE of the following categories:
 
 Error: {error_message}
 Context: {context}
 
-Categories:
+Categories (choose only ONE):
 - resource_error: Memory, CPU, disk space, connection limits
 - data_quality: Bad data, schema mismatches, validation failures
-- dependency_failure: Upstream task failures, external service unavailable
+- dependency_failure: Upstream task failures, external service unavailable, network issues
 - configuration_error: Wrong settings, missing parameters, bad configs
 - permission_error: Access denied, authentication failures
 - timeout_error: Operations taking too long, deadlocks
 - unknown: Cannot determine category
 
-Respond with just the category name (e.g., "resource_error").
+IMPORTANT: Respond with ONLY the category name as a single word.
+Examples of correct responses:
+- "dependency_failure"
+- "timeout_error"
+- "configuration_error"
+
+Do NOT combine categories with pipes (|) or commas. Choose the MOST relevant single category.
 """
 
 # Resolution suggestion prompt

@@ -1,4 +1,6 @@
+import logging
 import logging.config
+import sys
 from pathlib import Path
 
 import yaml
@@ -16,7 +18,12 @@ def setup_logging():
 
             logging.config.dictConfig(config)
     else:
-        logging.basicConfig(level=logging.INFO)
+        # Configure logging to use stderr by default to avoid polluting stdout in CLI usage
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            stream=sys.stderr
+        )
         logging.warning(
             "Logging configuration file not found. Using default logging settings."
         )
