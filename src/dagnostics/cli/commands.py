@@ -5,7 +5,7 @@ import typer
 import yaml
 from typer import Argument, Option
 
-from dagnostics.cli.utils import initialize_components
+from dagnostics.cli.utils import DateTimeEncoder, initialize_components
 from dagnostics.core.models import AnalysisResult, LogEntry, OutputFormat, ReportFormat
 from dagnostics.daemon.service import DaemonService
 from dagnostics.utils.sms import send_sms_alert
@@ -508,11 +508,20 @@ def get_error_candidates(
             dag_id, task_id, run_id, try_number, config_file, llm_provider
         )
 
-        # Print when used as CLI command
-        typer.echo(error_candidates)
+        # Convert to JSON for proper parsing in n8n
+        if isinstance(error_candidates, list):
+            # Convert Pydantic models to dicts and then to JSON
+            json_output = json.dumps(
+                [entry.model_dump() for entry in error_candidates], cls=DateTimeEncoder
+            )
+        else:
+            json_output = json.dumps({"error": str(error_candidates)})
+
+        typer.echo(json_output)
         return error_candidates
 
     except Exception as e:
         error_msg = f"Error extraction failed: {e}"
-        typer.echo(error_msg, err=True)
+        error_output = json.dumps({"error": error_msg})
+        typer.echo(error_output, err=True)
         return error_msg

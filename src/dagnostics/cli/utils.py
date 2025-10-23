@@ -2,6 +2,8 @@
 Reusable utilities for CLI commands
 """
 
+import json
+from datetime import datetime
 from typing import List, Optional, Tuple, Union
 
 import typer
@@ -25,6 +27,15 @@ from dagnostics.llm.engine import (
     OllamaProvider,
     OpenAIProvider,
 )
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder for datetime objects."""
+
+    def default(self, o):  # Changed from 'obj' to 'o'
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 def initialize_components(
