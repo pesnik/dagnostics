@@ -127,6 +127,38 @@ class DAGAnalyzer:
                 processing_time=(datetime.now() - start_time).total_seconds(),
             )
 
+    def extract_error_candidates(
+        self, dag_id: str, task_id: str, run_id: str, try_number: int
+    ) -> List[LogEntry] | str:
+        """Extract error line for SMS notifications using Drain3 clustering and LLM analysis"""
+        try:
+            # Step 1: Ensure baseline exists and get comparison info
+            _ = self._ensure_baseline(dag_id, task_id)
+
+            # Step 2: Collect failed task logs
+            failed_logs = self._collect_failed_logs(dag_id, task_id, run_id, try_number)
+
+            if not failed_logs:
+                return "No failed logs found"
+
+            # Step 3: Identify anomalous patterns using Drain3
+            anomalous_logs = self.clusterer.identify_anomalous_patterns(
+                failed_logs, dag_id, task_id
+            )
+
+            # Step 4: Filter known non-error patterns
+            error_candidates = self.filter.filter_candidates(anomalous_logs)
+
+            if not error_candidates:
+                return f"{dag_id}.{task_id}: No error patterns identified"
+
+            return error_candidates
+        except Exception as e:
+            logger.error(
+                f"Error extraction failed for {dag_id}.{task_id}.{run_id}: {e}"
+            )
+            return f"{dag_id}.{task_id}: Analysis failed - {str(e)}"
+
     def extract_task_error_for_sms(
         self, dag_id: str, task_id: str, run_id: str, try_number: int
     ) -> tuple[str, Optional[List[LogEntry]], str]:

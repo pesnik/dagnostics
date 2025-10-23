@@ -175,3 +175,24 @@ def get_error_message(
         return error_message, error_candidates, error_line
     except Exception as e:
         return f"Error extraction failed: {e}", None, ""
+
+
+def get_error_candidates(
+    dag_id: str,
+    task_id: str,
+    run_id: str,
+    try_number: int,
+    config_file: Optional[str] = None,
+    llm_provider: str = "ollama",
+) -> List[LogEntry] | str:
+    """
+    Internal function to get error message - can be used by CLI commands and other functions
+    """
+    try:
+        _, analyzer = initialize_components(config_file, llm_provider)
+        error_candidates = analyzer.extract_error_candidates(
+            dag_id, task_id, run_id, try_number
+        )
+        return error_candidates
+    except Exception as e:
+        return f"Error extraction failed: {e}"

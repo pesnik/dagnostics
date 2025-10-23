@@ -1,18 +1,18 @@
 import json
-from typing import Optional
+from typing import List, Optional
 
 import typer
 import yaml
 from typer import Argument, Option
 
 from dagnostics.cli.utils import initialize_components
-from dagnostics.core.models import AnalysisResult, OutputFormat, ReportFormat
+from dagnostics.core.models import AnalysisResult, LogEntry, OutputFormat, ReportFormat
 from dagnostics.daemon.service import DaemonService
 from dagnostics.utils.sms import send_sms_alert
 
 
 def web(
-    host: str = Option("0.0.0.0", "--host", "-h", help="Host to bind to"),
+    host: str = Option("127.0.0.1", "--host", "-h", help="Host to bind to"),
     port: int = Option(8000, "--port", "-p", help="Port to bind to"),
     reload: bool = Option(
         False, "--reload", "-r", help="Enable auto-reload for development"
@@ -75,10 +75,12 @@ def analyze(
         # Output results
         if output_format == OutputFormat.json:
             # Use Pydantic's model_dump with mode='json' to properly serialize Enums
-            typer.echo(json.dumps(result.model_dump(mode='json'), indent=2))
+            typer.echo(json.dumps(result.model_dump(mode="json"), indent=2))
         elif output_format == OutputFormat.yaml:
             # Use model_dump for YAML as well for consistency
-            typer.echo(yaml.dump(result.model_dump(mode='json'), default_flow_style=False))
+            typer.echo(
+                yaml.dump(result.model_dump(mode="json"), default_flow_style=False)
+            )
         else:  # text format
             _print_text_analysis(result, verbose)
 
@@ -473,6 +475,42 @@ def get_error(
         # Print when used as CLI command
         typer.echo(error_line)
         return error_line
+
+    except Exception as e:
+        error_msg = f"Error extraction failed: {e}"
+        typer.echo(error_msg, err=True)
+        return error_msg
+
+
+def get_error_candidates(
+    dag_id: str = Argument(..., help="ID of the DAG to analyze"),
+    task_id: str = Argument(..., help="ID of the task to analyze"),
+    run_id: str = Argument(..., help="Run ID of the task instance"),
+    try_number: int = Argument(..., help="Attempt number of the task to analyze"),
+    config_file: Optional[str] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to configuration file (default: searches standard locations)",
+    ),
+    llm_provider: str = Option(
+        "ollama",
+        "--llm",
+        "-l",
+        help="LLM provider to use (ollama, openai, anthropic, gemini)",
+    ),
+) -> List[LogEntry] | str:
+    """Get the exact error message for a specific task failure."""
+    from dagnostics.cli.utils import get_error_candidates
+
+    try:
+        error_candidates = get_error_candidates(
+            dag_id, task_id, run_id, try_number, config_file, llm_provider
+        )
+
+        # Print when used as CLI command
+        # typer.echo(error_candidates)
+        return error_candidates
 
     except Exception as e:
         error_msg = f"Error extraction failed: {e}"

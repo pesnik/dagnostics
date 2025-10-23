@@ -3,6 +3,7 @@ import typer
 from dagnostics.cli.commands import (
     analyze,
     get_error,
+    get_error_candidates,
     notify_failures,
     report,
     restart,
@@ -40,6 +41,7 @@ app.command()(status)
 app.command()(restart)
 app.command()(analyze)
 app.command()(get_error)
+app.command()(get_error_candidates)
 app.command()(notify_failures)
 app.command()(report)
 app.command()(web)
