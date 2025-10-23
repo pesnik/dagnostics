@@ -509,7 +509,7 @@ def get_error_candidates(
         )
 
         # Print when used as CLI command
-        # typer.echo(error_candidates)
+        typer.echo(error_candidates)
         return error_candidates
 
     except Exception as e:
