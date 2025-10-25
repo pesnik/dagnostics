@@ -60,8 +60,8 @@ class FilterFactory:
             if "Caused by" in message:
                 return False
 
-            return message.startswith(("[", "$")) or bool(
-                re.search(r"TPT\d+:", message)
+            return not (
+                message.startswith(("[", "$")) or bool(re.search(r"TPT\d+:", message))
             )
 
         # Register custom functions
