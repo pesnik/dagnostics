@@ -61,7 +61,7 @@ class FilterFactory:
                 return False
 
             return not (
-                message.startswith(("[", "$")) or bool(re.search(r"TPT\d+:", message))
+                message.startswith(("[", "$")) or bool(re.search(r"TPT\d+", message))
             )
 
         # Register custom functions
