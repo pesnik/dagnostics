@@ -4,6 +4,7 @@ Centralizes filter creation logic for different use cases.
 """
 
 import logging
+import re
 
 from dagnostics.core.models import AppConfig, LogEntry
 from dagnostics.heuristics.pattern_filter import ErrorPatternFilter
@@ -54,10 +55,13 @@ class FilterFactory:
             )
 
         def standard_error_log_except_start_with_caused_by(log_entry: LogEntry) -> bool:
-            return (
-                not log_entry.message.startswith("[")
-                and not log_entry.message.startswith("$")
-                and "Caused by" not in log_entry.message
+            message = log_entry.message
+
+            if "Caused by" in message:
+                return False
+
+            return message.startswith(("[", "$")) or bool(
+                re.search(r"TPT\d+:", message)
             )
 
         # Register custom functions
